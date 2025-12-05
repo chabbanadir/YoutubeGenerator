@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using System.Text.Json;
 using YoutubeGenerator.Interfaces;
 using YoutubeGenerator.Models;
+using YoutubeGenerator.Services;
 
 namespace YoutubeGenerator.Workers
 {
@@ -12,10 +13,14 @@ namespace YoutubeGenerator.Workers
         private readonly ITrimService _trim;
         private readonly ITransitionService _transition;
         private readonly ILogger<CollectWorker> _logger;
-        private readonly string _dirRaw;
-        private readonly string _dirTrim;
-        private readonly string _dirBags;
+        private readonly IPathService _pathService;
+        private readonly IGitHubCsvFetcher _githubCsvFetcher;
+        private readonly ICsvService _csvService;
         private readonly IHostApplicationLifetime _appLifetime;
+        private readonly IMontageProfileService _profiles;
+        private string _rootPath;
+        private TimeSpan _minMontageDurationMinutes ;
+        private readonly string _dirBags;
 
         private readonly string _workerFile;
         private readonly string _bagSource;
@@ -23,6 +28,7 @@ namespace YoutubeGenerator.Workers
         private readonly string _bagTrim;
         private readonly string _bagMontage;
         private readonly string _bagFailed;
+
         private readonly int n;
 
         public CollectWorker(
@@ -32,26 +38,27 @@ namespace YoutubeGenerator.Workers
           IOptions<CollectWorkerConfig> cfg,
           IWebHostEnvironment env,
           ILogger<CollectWorker> logger,
-          IHostApplicationLifetime appLifetime)
+          IHostApplicationLifetime appLifetime,
+          IGitHubCsvFetcher githubCsvFetcher,
+          ICsvService csvService,
+          IMontageProfileService profiels,
+          IPathService pathService)
         {
+            _pathService = pathService;
             _download = download;
             _trim = trim;
             _transition = transition;
             _logger = logger;
             _appLifetime = appLifetime;
-
+            _githubCsvFetcher = githubCsvFetcher;
+            _csvService = csvService;
             var cfgValue = cfg.Value;
             n = cfgValue.BatchSize;
-            
-            // Construction des chemins (simplifiée)
-            var root = Path.Combine(env.ContentRootPath, "workspace");
-            _dirRaw = Path.Combine(root, "jobs", "raw");
-            _dirTrim = Path.Combine(root, "jobs", "trim");
-            _dirBags = Path.Combine(root, "bags");
-
-            Directory.CreateDirectory(_dirRaw);
-            Directory.CreateDirectory(_dirTrim);
-            Directory.CreateDirectory(_dirBags);
+            _profiles = profiels;
+      // Construction des chemins (simplifiée)
+                  _rootPath = Path.Combine(env.ContentRootPath, "workspace");
+            _dirBags = Path.Combine(_rootPath, "bags");
+            //_minMontageDurationMinutes = TimeSpan.FromMinutes(cfgValue.MinMontageDurationMinutes);
 
             // Attribution des chemins de fichiers (sans la config pour éviter la duplication)
             // --- 3. Construction des Chemins de Fichiers (Utilisation du nom du fichier configuré) ---
@@ -73,11 +80,11 @@ namespace YoutubeGenerator.Workers
         {
             try
             {
-                var worker = Load<Worker1Model>(_workerFile);
+                var worker = JsonFileService.Load<Worker1Model>(_workerFile);
                 if (worker.Status)
                 {
                     worker.Status = false;
-                    Save(_workerFile, worker);
+                    JsonFileService.Save(_workerFile, worker);
                     _logger.LogInformation("✅ Worker status forced to 'false' in worker.json");
                 }
             }
@@ -89,28 +96,49 @@ namespace YoutubeGenerator.Workers
         public async Task RunAsync(CancellationToken cancellationToken)
         {
             // 0. Verrouillage
-            var worker = Load<Worker1Model>(_workerFile);
+            var worker = JsonFileService.Load<Worker1Model>(_workerFile);
             if (worker.Status)
                 return;
 
             worker.Status = true;
-            Save(_workerFile, worker);
+            JsonFileService.Save(_workerFile, worker);
 
             try
             {
                 // 1. TENTATIVE DE REMPLISSAGE (Phase 0)
-                var tempBag = Load<List<ClipInfo>>(_bagTemp);
+                var tempBag = JsonFileService.Load<List<ClipInfo>>(_bagTemp);
+                var downloadBag = JsonFileService.Load<List<ClipInfo>>(_bagSource);
 
+                if (downloadBag.Count == 0)
+                {
+                    _logger.LogInformation("📥 Download bag empty → Fetching CSV from GitHub...");
+
+                    using var stream = await _githubCsvFetcher.DownloadCsvAsync();
+                    var items = await _csvService.ParseCsvAsync(stream);
+
+                    if (items.Count > 0)
+                    {
+                        downloadBag.AddRange(items);
+                        JsonFileService.Save(_bagSource, downloadBag);
+
+                        // Clear remote CSV
+                        await _githubCsvFetcher.ClearCsvAsync();
+                        _logger.LogInformation($"🧹 Remote CSV cleared ({items.Count} items imported)");
+                    }
+                    else
+                    {
+                        _logger.LogInformation("CSV was empty — nothing to import.");
+                    }
+                }
                 if (tempBag.Count == 0)
                 {
-                    var downloadBag = Load<List<ClipInfo>>(_bagSource);
                     if (downloadBag.Count > 0)
                     {
                         var itemsToMove = downloadBag.Take(n).ToList();
                         tempBag.AddRange(itemsToMove);
                         downloadBag = downloadBag.Skip(n).ToList();
-                        Save(_bagTemp, tempBag);
-                        Save(_bagSource, downloadBag);
+                        JsonFileService.Save(_bagTemp, tempBag);
+                        JsonFileService.Save(_bagSource, downloadBag);
                     }
                     // On ne retourne plus ici! On continue vers le traitement.
                 }
@@ -126,9 +154,9 @@ namespace YoutubeGenerator.Workers
                 // PHASE 1 : TRAITEMENT DES CLIPS INDIVIDUELS
                 // --------------------------------------------------------
 
-                var trimBag = Load<List<TrimResult>>(_bagTrim);
+                var trimBag = JsonFileService.Load<List<TrimResult>>(_bagTrim);
                 // Load the failed bag
-                var failedBag = Load<List<ClipInfo>>(_bagFailed);
+                var failedBag = JsonFileService.Load<List<ClipInfo>>(_bagFailed);
                 for (int i = tempBag.Count - 1; i >= 0; i--)
                 {
                     if (cancellationToken.IsCancellationRequested) break;
@@ -136,68 +164,74 @@ namespace YoutubeGenerator.Workers
                     var clip = tempBag[i];
                     _logger.LogInformation($"🚀 Processing clip {i}: {clip.Link}");
 
-                    // --- CHANGED LOGIC HERE ---
+                    // Get correct directories
+                    var dirRaw = _pathService.GetRawDir(clip.KindKey, clip.SubKindKey, _rootPath);
+                    var dirTrim = _pathService.GetTrimDir(clip.KindKey, clip.SubKindKey, _rootPath);
 
-                    // 1. Call Download and get Result object
-                    var downloadResult = await _download.DownloadAsync(clip, _dirRaw, ++worker.DownloadCounter);
+                    // 🔹 STEP 1 — DOWNLOAD
+                    var downloadResult = await _download.DownloadAsync(clip, dirRaw, worker.DownloadCounter);
 
                     if (!downloadResult.Success)
                     {
-                        _logger.LogWarning($"⚠️ Download failed for clip {i}. Reason: {downloadResult.ErrorType}. Moving to Failed Bag.");
-
-                        // 2. Add specific error info to the clip description or a new field if you want debugging later
+                        _logger.LogWarning($"⚠️ Download failed for clip {i}. Reason: {downloadResult.ErrorType}");
                         clip.Description += $" [FAILED: {downloadResult.ErrorType}]";
-
-                        // 3. Move to Failed Bag
                         failedBag.Add(clip);
-                        tempBag.RemoveAt(i); // Remove from active queue
+                        tempBag.RemoveAt(i);
 
-                        // 4. Save Immediately
-                        Save(_bagFailed, failedBag);
-                        Save(_bagTemp, tempBag);
-
-                        // Continue to next clip, do NOT try to trim
+                        JsonFileService.Save(_bagFailed, failedBag);
+                        JsonFileService.Save(_bagTemp, tempBag);
                         continue;
                     }
 
-                    // If we get here, download was successful
+                    worker.DownloadCounter++;
                     string rawFilePath = downloadResult.FilePath;
 
                     try
                     {
-                        // 5. Proceed with Trim using the valid path
-                        var trimResult = await _trim.TrimAsync(rawFilePath, clip, _dirTrim, ++worker.TrimCounter);
+                        // 🔹 STEP 2 — TRIM + NORMALIZE (1 single operation)
+                        var trimResult =
+                            await _trim.TrimAsync(rawFilePath, clip, dirTrim, worker.TrimCounter);
 
-                        // ... Rest of your existing trim logic ...
-                        await _trim.NormalizeOneAsync(rawFilePath);
-                        double duration = await _transition.GetVideoDurationAsync(trimResult.File);
+                        worker.TrimCounter++;
 
-                        trimResult.Duration = duration;
+                        // Copy metadata
+                        trimResult.KindKey = clip.KindKey ?? "";
+                        trimResult.SubKindKey = clip.SubKindKey ?? "";
+
+                        // 🔹 STEP 3 — GET DURATION
+                        trimResult.Duration =
+                            await _transition.GetVideoDurationAsync(trimResult.File);
+
+                        // Add to trim bag
                         trimBag.Add(trimResult);
 
-                        if (File.Exists(rawFilePath)) File.Delete(rawFilePath);
+                        // Remove raw file
+                        if (File.Exists(rawFilePath))
+                            File.Delete(rawFilePath);
 
+                        // Remove from temp bag
                         tempBag.RemoveAt(i);
-                        Save(_bagTrim, trimBag);
-                        Save(_bagTemp, tempBag);
-                        Save(_workerFile, worker);
+
+                        // SAVE STATE
+                        JsonFileService.Save(_bagTrim, trimBag);
+                        JsonFileService.Save(_bagTemp, tempBag);
+                        JsonFileService.Save(_workerFile, worker);
                     }
                     catch (Exception ex)
                     {
-                        // This catch block now handles TRIM errors, not download errors
                         _logger.LogError(ex, $"🚨 Trim/Process failed for clip {i}.");
                     }
                     finally
                     {
-                        // AJOUTER CE BLOC FINALLY pour garantir la suppression du fichier brut 
-                        // MÊME en cas d'échec du trim/normalisation (sauf si vous voulez le conserver pour debug)
+                        // Always clean raw file safely
                         if (File.Exists(rawFilePath))
                         {
                             File.Delete(rawFilePath);
-                            _logger.LogInformation($"🗑️ Fichier brut {rawFilePath} supprimé après traitement.");
+                            _logger.LogInformation($"🗑️ Deleted raw file {rawFilePath}");
                         }
                     }
                 }
+
 
 
                 // --------------------------------------------------------
@@ -205,23 +239,29 @@ namespace YoutubeGenerator.Workers
                 // --------------------------------------------------------
                 if (trimBag.Count > 0)
                 {
-                    var montageBag = Load<List<MontageItem>>(_bagMontage);
+                    var montageBag = JsonFileService.Load<List<MontageItem>>(_bagMontage);
                     TimeSpan maxMontageDuration = TimeSpan.FromMinutes(12);
 
                     for (int i = trimBag.Count - 1; i >= 0; i--)
                     {
                         var clipToPackage = trimBag[i];
                         TimeSpan clipDuration = TimeSpan.FromSeconds(clipToPackage.Duration);
+                        var matchingPackage = montageBag.Where(x => x.KindKey == clipToPackage.KindKey && x.SubKindKey == clipToPackage.SubKindKey)
+                            .ToList();
+                        var currentPackage = matchingPackage.LastOrDefault();
 
-                        var currentPackage = montageBag.LastOrDefault();
-                        bool mustCreateNew = currentPackage == null || (currentPackage.TotalDuration + clipDuration) > maxMontageDuration;
+
+
+                        bool mustCreateNew = currentPackage == null || currentPackage.Completed;
 
                         if (mustCreateNew)
                         {
                             currentPackage = new MontageItem
                             {
                                 MontageId = Guid.NewGuid().ToString(),
-                                TotalDuration = TimeSpan.Zero
+                                TotalDuration = TimeSpan.Zero,
+                                KindKey = clipToPackage.KindKey,
+                                SubKindKey = clipToPackage.SubKindKey
                             };
                             montageBag.Add(currentPackage);
                             _logger.LogInformation($"📦 Création d'un nouveau paquet de montage: {currentPackage.MontageId}");
@@ -238,39 +278,23 @@ namespace YoutubeGenerator.Workers
                         // Ajout du clip au paquet et mise à jour de la durée totale
                         currentPackage.Clips.Add(newMontageClip);
                         currentPackage.TotalDuration += newMontageClip.Duration;
+                        _minMontageDurationMinutes = TimeSpan.FromMinutes( _profiles.GetProfile(currentPackage.KindKey, currentPackage.SubKindKey).MinMontageMinutes);
                         _logger.LogInformation($"➡️ Clip ajouté au paquet {currentPackage.MontageId}. Nouvelle durée: {currentPackage.TotalDuration:mm\\:ss}");
+                        if (currentPackage.TotalDuration > _minMontageDurationMinutes ) currentPackage.Completed = true;
 
                         // Nettoyage et Sauvegarde
                         trimBag.RemoveAt(i);
-                        Save(_bagMontage, montageBag);
-                        Save(_bagTrim, trimBag);
+                        JsonFileService.Save(_bagMontage, montageBag);
+                        JsonFileService.Save(_bagTrim, trimBag);
                     } // Fin de la boucle trimBag
                 } // Fin du if (trimBag.Count > 0)
             }
             finally
             {
                 worker.Status = false;
-                Save(_workerFile, worker);
+                JsonFileService.Save(_workerFile, worker);
             }
         }
-        private T Load<T>(string file)
-        {
-            if (!File.Exists(file))
-                return Activator.CreateInstance<T>();
 
-            var json = File.ReadAllText(file);
-            return string.IsNullOrWhiteSpace(json)
-                ? Activator.CreateInstance<T>()
-                : JsonSerializer.Deserialize<T>(json)!;
-        }
-        private void Save<T>(string file, T obj)
-        {
-            var dir = Path.GetDirectoryName(file);
-            if (!string.IsNullOrEmpty(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(file, json);
-        }
     }
 }

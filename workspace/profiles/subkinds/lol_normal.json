@@ -1,0 +1,8 @@
+{
+  "KindKey": "lol",
+  "SubKindKey": "normal",
+  "IntroFile": "intro_lol.mp4",
+  "TransitionAnimation": "fade",
+  "TransitionDuration": 2,
+  "MinMontageMinutes": 12
+}

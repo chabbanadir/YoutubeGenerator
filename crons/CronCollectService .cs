@@ -26,6 +26,7 @@ namespace YoutubeGenerator.crons
 
                 var collectWorker = scope.ServiceProvider.GetRequiredService<CollectWorker>();
                 var montageWorker = scope.ServiceProvider.GetRequiredService<MontageWorker>();
+                var youtubeWorker = scope.ServiceProvider.GetRequiredService<YoutubeWorker>();
                 await collectWorker.RunAsync(stoppingToken); // appel du worker !
 
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
@@ -33,6 +34,9 @@ namespace YoutubeGenerator.crons
                 await montageWorker.RunAsync(stoppingToken); // appel du worker !
 
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                await youtubeWorker.RunAsync(); // appel du worker !
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+
             }
         }
     }

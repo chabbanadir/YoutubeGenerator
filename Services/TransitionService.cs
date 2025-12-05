@@ -1,176 +1,152 @@
-﻿    using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using System.Transactions;
-    using YoutubeGenerator.Interfaces;
-    using YoutubeGenerator.Utils;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using YoutubeGenerator.Interfaces;
+using YoutubeGenerator.Utils;
 
-    namespace YoutubeGenerator.Services
+namespace YoutubeGenerator.Services
+{
+    public class TransitionService : ITransitionService
     {
-        public class TransitionService : ITransitionService
+        private readonly int _fps = 30;
+        private readonly string _width = "1920";
+        private readonly string _height = "1080";
+
+        public async Task<double> GetVideoDurationAsync(string videoPath, CancellationToken ct = default)
         {
-            private readonly int _fps = 30;
-            private readonly string _width = "1920";
-            private readonly string _height = "1080";
+            var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync(
+                "ffprobe",
+                $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{videoPath}\"",
+                ct: ct
+            );
 
-            public async Task<double> GetVideoDurationAsync(string videoPath, CancellationToken ct = default)
+            if (exitCode != 0)
+                throw new Exception($"Failed to get video duration for '{videoPath}': {stderr}");
+
+            var durationStr = stdout.Trim();
+            if (!double.TryParse(durationStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double duration))
+                throw new Exception($"Invalid duration format: {durationStr}");
+
+            return duration;
+        }
+
+        /// <summary>
+        /// Merge sequentially: base + next clip with xfade and acrossfade.
+        /// Uses libx264 (CPU) for deterministic encoding during merges,
+        /// keeps audio as pcm_s16le during merges to avoid drift, and
+        /// re-encodes to AAC once at the end.
+        /// </summary>
+        public async Task<bool> MergeVideosWithTransitionsAsync(
+            List<string> clips,
+            string finalOutputPath,
+            string transitionType,
+            double transitionDuration,
+            CancellationToken ct = default)
+        {
+            if (clips == null || clips.Count == 0)
+                throw new ArgumentException("No video provided", nameof(clips));
+
+            if (clips.Count == 1)
             {
-                var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync(
-                    "ffprobe",
-                    $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{videoPath}\"",
-                    ct: ct
-                );
-
-                if (exitCode != 0)
-                    throw new Exception($"Failed to get video duration for '{videoPath}': {stderr}");
-
-                var durationStr = stdout.Trim();
-                if (!double.TryParse(durationStr, out double duration))
-                    throw new Exception($"Invalid duration format: {durationStr}");
-
-                return duration;
-            }
-
-            public async Task<bool> MergeVideosWithTransitionsAsync(
-                List<string> videoPaths,
-                string outputPath,
-                string transitionType = "fade",
-                double transitionDuration = 2.0,
-                CancellationToken ct = default)
-            {
-                if (videoPaths == null || videoPaths.Count < 2)
-                    throw new ArgumentException("Need at least 2 videos for transitions", nameof(videoPaths));
-
-                Console.WriteLine($"[TransitionService] Starting merge of {videoPaths.Count} videos...");
-
-                // Step 1: Get all video durations
-                var durations = new List<double>();
-                for (int i = 0; i < videoPaths.Count; i++)
-                {
-                    var duration = await GetVideoDurationAsync(videoPaths[i], ct);
-                    durations.Add(duration);
-                    Console.WriteLine($"[TransitionService] Video {i}: {videoPaths[i]} - Duration: {duration:F2}s");
-                }
-
-                // Step 2: Build the FFmpeg command
-                var arguments = BuildFFmpegArguments(videoPaths, durations, outputPath, transitionType, transitionDuration);
-
-                Console.WriteLine($"[TransitionService] Executing FFmpeg command...");
-                Console.WriteLine($"[TransitionService] Output: {outputPath}");
-
-                // Step 3: Execute FFmpeg
-                var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync(
-                    "ffmpeg",
-                    arguments,
-                    ct: ct
-                );
-
-                if (exitCode != 0)
-                {
-                    Console.WriteLine($"[TransitionService] FFmpeg failed with exit code {exitCode}");
-                    Console.WriteLine($"[TransitionService] Error output:\n{stderr}");
-                    return false;
-                }
-
-                Console.WriteLine($"[TransitionService] ✓ Success! Video created: {outputPath}");
+                // Single clip: ensure final is AAC encoded (in case clip uses pcm/aac mismatch)
+                await FinalizeToAacAsync(clips[0], finalOutputPath);
                 return true;
             }
 
-            private string BuildFFmpegArguments(
-                List<string> videoPaths,
-                List<double> durations,
-                string outputPath,
-                string transitionType,
-                double transitionDuration)
+            // Start with first clip as base
+            File.Copy(clips[0], finalOutputPath, overwrite: true);
+
+            for (int i = 1; i < clips.Count; i++)
             {
-                // Build input arguments
-                var inputs = string.Join(" ", videoPaths.Select(p => $"-hwaccel cuda -i \"{p}\""));
+                if (ct.IsCancellationRequested)
+                    return false;
 
-                // Build normalizer: standardize fps, resolution, format for all videos
-                var normalizer = "";
-                for (int i = 0; i < videoPaths.Count; i++)
+                string clipNext = clips[i];
+
+                // get base duration to compute offset for xfade
+                double durationBase = await GetVideoDurationAsync(finalOutputPath, ct);
+                double offset = Math.Max(0, durationBase - transitionDuration);
+
+                string offsetStr = offset.ToString(CultureInfo.InvariantCulture);
+                string transDurStr = transitionDuration.ToString(CultureInfo.InvariantCulture);
+
+                string temp = Path.Combine(Path.GetDirectoryName(finalOutputPath)!, $"temp_merge_{i}.mp4");
+
+                // Build filter complex:
+                // - ensure both videos have same fps/scale/pixfmt and setsar=1
+                // - xfade on video
+                // - aformat to s16 48k stereo for safe acrossfade
+                // - acrossfade for audio
+                string args =
+                    $"-y -i \"{finalOutputPath}\" -i \"{clipNext}\" " +
+                    "-filter_complex " +
+                    $"\"[0:v]fps={_fps},scale={_width}:{_height}:force_original_aspect_ratio=decrease," +
+                    $"pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p,setsar=1[v0];" +
+                    $"[1:v]fps={_fps},scale={_width}:{_height}:force_original_aspect_ratio=decrease," +
+                    $"pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p,setsar=1[v1];" +
+                    $"[v0][v1]xfade=transition={transitionType}:duration={transDurStr}:offset={offsetStr}[vout];" +
+
+                    // audio: convert both to s16 @ 48k stereo, then acrossfade
+                    $"[0:a]aformat=sample_fmts=s16:sample_rates=48000:channel_layouts=stereo[a0];" +
+                    $"[1:a]aformat=sample_fmts=s16:sample_rates=48000:channel_layouts=stereo[a1];" +
+                    $"[a0][a1]acrossfade=d={transDurStr}:c1=tri:c2=tri[aout]\" " +
+
+                    // map and encode: libx264 for video, keep audio as PCM during merge
+                    "-map \"[vout]\" -map \"[aout]\" " +
+                    "-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p " +
+                    "-c:a pcm_s16le " +
+                    $"-y \"{temp}\"";
+
+                var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", args, null, ct);
+
+                if (exitCode != 0)
                 {
-                    normalizer += $"[{i}:v]fps={_fps}," +
-                                  $"scale={_width}:{_height}:force_original_aspect_ratio=decrease," +
-                                  $"pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2," +
-                                  $"settb=AVTB," +
-                                  $"setpts=PTS-STARTPTS," +
-                                  $"format=yuv420p[v{i}];";
+                    // cleanup and exit
+                    if (File.Exists(temp)) File.Delete(temp);
+                    Console.WriteLine(stderr);
+                    return false;
                 }
 
-                // Build video transitions chain
-                var videoTransitions = "";
-                var audioTransitions = "";
-                var lastVideoOutput = "v0";
-                var lastAudioOutput = "0:a";
-                double cumulativeOffset = 0;
-
-                for (int i = 1; i < videoPaths.Count; i++)
-                {
-                    // Calculate offset for this transition
-                    // Formula: offset = sum of previous video durations - sum of previous transitions
-                    cumulativeOffset += durations[i - 1] - transitionDuration;
-
-                    var currentVideoOutput = $"vt{i}";
-                    var currentAudioOutput = $"at{i}";
-
-                    // Video xfade transition
-                    videoTransitions += $"[{lastVideoOutput}][v{i}]" +
-                                       $"xfade=transition={transitionType}:" +
-                                       $"duration={transitionDuration}:" +
-                                       $"offset={cumulativeOffset:F3}" +
-                                       $"[{currentVideoOutput}];";
-
-                    // Audio crossfade
-                    audioTransitions += $"[{lastAudioOutput}][{i}:a]" +
-                                       $"acrossfade=d={transitionDuration}" +
-                                       $"[{currentAudioOutput}];";
-
-                    lastVideoOutput = currentVideoOutput;
-                    lastAudioOutput = currentAudioOutput;
-                }
-
-                // Remove trailing semicolon from audio transitions
-                audioTransitions = audioTransitions.TrimEnd(';');
-
-                // Complete filter complex
-                var filterComplex = normalizer + videoTransitions + audioTransitions;
-
-                // Build final FFmpeg arguments
-                var arguments = $"{inputs} " +
-                   $"-filter_complex \"{filterComplex}\" " +
-                   $"-map \"[{lastVideoOutput}]\" " +
-                   $"-map \"[{lastAudioOutput}]\" " +
-                   $"-c:v h264_nvenc " +      // GPU Encoder
-                   $"-preset p4 " +           // NVENC preset
-                   $"-cq 23 -rc vbr_hq " +    // Quality settings
-                   $"-profile:v high " +
-                   $"-level 4.0 " +
-                   $"-pix_fmt yuv420p " +
-                   $"-c:a aac " +
-                   $"-b:a 192k " +
-                   $"-movflags +faststart " +
-                   $"-y " +
-                   $"\"{outputPath}\"";
-
-            return arguments;
+                // replace base with new merged result (overwrite)
+                if (File.Exists(finalOutputPath)) File.Delete(finalOutputPath);
+                File.Move(temp, finalOutputPath);
             }
+
+            // Final step: encode audio to AAC and keep video as-is (libx264 output OK)
+            bool finalizeOk = await FinalizeToAacAsync(finalOutputPath, finalOutputPath);
+            return finalizeOk;
+        }
+
+        /// <summary>
+        /// Re-encode audio to AAC and keep video stream as-is.
+        /// Writes to a temp file and replaces input with final output.
+        /// </summary>
+        private async Task<bool> FinalizeToAacAsync(string input, string output)
+        {
+            string temp = output + ".aacfinal.mp4";
+
+            string args =
+                $"-y -i \"{input}\" " +
+                "-c:v copy " +
+                "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
+                $"\"{temp}\"";
+
+            var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", args, null, CancellationToken.None);
+
+            if (exitCode != 0)
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+                Console.WriteLine(stderr);
+                return false;
+            }
+
+            // Replace input with final
+            if (File.Exists(input)) File.Delete(input);
+            File.Move(temp, output);
+            return true;
         }
     }
-
-
-            //Transition Description
-            //fade	Simple cross-fade (recommended)
-            //dissolve	Smooth dissolve blend
-            //wipeleft	Wipe from right to left
-            //wiperight	Wipe from left to right
-            //wipeup	Wipe from bottom to top
-            //wipedown	Wipe from top to bottom
-            //slideleft	Slide from right to left
-            //slideright	Slide from left to right
-            //slideup	Slide from bottom to top
-            //slidedown	Slide from top to bottom
-            //circlecrop	Circular reveal
-            //pixelize	Pixelated transition
+}

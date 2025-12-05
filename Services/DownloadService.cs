@@ -6,30 +6,29 @@ namespace YoutubeGenerator.Services
 {
     public class DownloadService : IDownloadService
     {
-        private readonly string _ytDlpPath = "C:\\Users\\nadir\\AppData\\Local\\Microsoft\\WinGet\\Packages\\yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe\\yt-dlp.exe";
-        private readonly ITrimService _trimService;
+        private readonly string _ytDlpPath =
+            "C:\\Users\\nadir\\AppData\\Local\\Microsoft\\WinGet\\Packages\\yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe\\yt-dlp.exe";
 
-        public DownloadService(ITrimService trimService)
-        {
-            _trimService = trimService;
-        }
+        public DownloadService(ITrimService trimService) { }
+
         public async Task<DownloadResult> DownloadAsync(ClipInfo clip, string outputDir, int increment)
         {
-            string fileName = $"{increment}.mp4"; // or however you name your files
+            string fileName = $"{increment}.mp4";
             string outputPath = Path.Combine(outputDir, fileName);
 
-            // Basic check to avoid re-downloading if file exists and is good
+            // If file already exists, skip downloading
             if (File.Exists(outputPath))
-            {
                 return new DownloadResult { Success = true, FilePath = outputPath };
-            }
 
-            // Construct your yt-dlp arguments (Using your existing logic)
-            // Note: Added --no-continue to help with 416 errors sometimes, 
-            // but for now let's just focus on capturing the error.
-            string args = $"-f \"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best\" " +
-                          $"-o \"{outputPath}\" " +
-                          $"\"{clip.Link}\"";
+            // ⭐ VERY IMPORTANT ⭐
+            // FORCE re-encode => guaranteed uniform audio/video format
+            string args =
+                $"-f \"bv*+ba/b\" " +
+                $"--merge-output-format mp4 " +
+                $"--recode-video mp4 " +
+                $"--postprocessor-args \"-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -vf scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2\" " +
+                $"-o \"{outputPath}\" " +
+                $"\"{clip.Link}\"";
 
             try
             {
@@ -37,12 +36,10 @@ namespace YoutubeGenerator.Services
 
                 if (code != 0)
                 {
-                    // Return failure instead of throwing
                     return new DownloadResult
                     {
                         Success = false,
                         ErrorMessage = stderr,
-                        // specific check for your current error
                         ErrorType = stderr.Contains("HTTP Error 416") ? "HTTP_416" : "General_Error"
                     };
                 }
@@ -63,6 +60,5 @@ namespace YoutubeGenerator.Services
                 };
             }
         }
-
     }
 }

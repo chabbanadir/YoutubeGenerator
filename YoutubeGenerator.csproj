@@ -12,19 +12,20 @@
 		<PackageReference Include="CsvHelper" Version="33.1.0" />
 		<PackageReference Include="FluentAssertions" Version="8.8.0" />
 		<PackageReference Include="FluentResults" Version="4.0.0" />
+		<PackageReference Include="Google.Apis.Auth" Version="1.73.0" />
+		<PackageReference Include="Google.Apis.YouTube.v3" Version="1.70.0.3847" />
+		<PackageReference Include="Google_GenerativeAI" Version="3.4.1" />
 		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.AI" Version="10.0.1" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
 		<PackageReference Include="System.IO.Abstractions" Version="22.0.16" />
+
 	</ItemGroup>
 
 	<ItemGroup>
 		<Folder Include="Configuration\" />
 		<Folder Include="workspace\jobs\" />
-		<Folder Include="workspace\ressources\" />
-		<Folder Include="workspace\jobs\raw\" />
-		<Folder Include="workspace\jobs\trim\" />
-		<Folder Include="workspace\jobs\montage\" />
 	</ItemGroup>
 
 </Project>

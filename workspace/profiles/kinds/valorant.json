@@ -1,0 +1,14 @@
+{
+  "KindKey": "lol",
+  "YoutubeChannelId": "UCxxxxxx",
+  "YoutubeClientId": "xxx.apps.googleusercontent.com",
+  "YoutubeClientSecret": "xxxx",
+  "YoutubeRefreshToken": "xxxx",
+  "UploadConfig": {
+    "MinDelayHours": 6,
+    "LastUploadTime": "2025-12-04T00:00:00Z",
+    "UploadCounter": 0,
+    "Enabled": false
+  }
+
+}

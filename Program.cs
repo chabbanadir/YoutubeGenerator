@@ -9,6 +9,11 @@ using YoutubeGenerator.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddSingleton<ILlmService>(sp =>
+{
+    var apiKey = builder.Configuration["Google:ApiKey"];
+    return new LlmService(apiKey);
+});
 // ----------------------
 // Services
 // ----------------------
@@ -16,10 +21,11 @@ builder.Services.AddScoped<IDownloadService, DownloadService>();
 builder.Services.AddScoped<ICsvService, CsvService>();
 builder.Services.AddScoped<ITrimService, TrimService>();
 builder.Services.AddScoped<ITransitionService, TransitionService>();
-
-
+builder.Services.AddScoped<IPathService, PathService>();
+builder.Services.AddScoped<IMontageProfileService, MontageProfileService>();
 //builder.Services.AddScoped<VideoPipeline>();
-
+builder.Services.AddScoped<IYoutubeUploader, YoutubeUploader>();
+builder.Services.AddScoped<IGitHubCsvFetcher, GitHubCsvFetcher>();
 builder.Services.Configure<CollectWorkerConfig>(
     builder.Configuration.GetSection("CollectWorker")
 );
@@ -27,6 +33,7 @@ builder.Services.Configure<CollectWorkerConfig>(
 // CollectWorker reste SCOPED !
 builder.Services.AddScoped<CollectWorker>();
 builder.Services.AddScoped<MontageWorker>();
+builder.Services.AddScoped<YoutubeWorker>();
 
 // Cron = toujours Singleton
 builder.Services.AddHostedService<CronCollectService>();
