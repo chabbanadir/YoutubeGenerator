@@ -105,125 +105,127 @@ namespace YoutubeGenerator.workers
                     return;
                 }
 
-                var packageToRender = completedPackages.First();
-
-                _logger.LogInformation(
-                    $"🎬 Rendering package: {packageToRender.MontageId} " +
-                    $"({packageToRender.KindKey}/{packageToRender.SubKindKey}, {packageToRender.Clips.Count} clips)");
-
-                // Load profile for this specific kind/subkind
-                var profile = _profileService.GetProfile(
-                    packageToRender.KindKey,
-                    packageToRender.SubKindKey
-                );
-
-                string introPath = Path.Combine(_dirResources, profile.IntroFile);
-                _logger.LogInformation($"📼 Intro path: {introPath}");
-
-                // Directories for montage/trim
-                var dirMontage = _pathService.GetMontageDir(
-                    packageToRender.KindKey,
-                    packageToRender.SubKindKey,
-                    _rootPath
-                );
-                Directory.CreateDirectory(dirMontage);
-
-                var dirTrim = _pathService.GetTrimDir(
-                    packageToRender.KindKey,
-                    packageToRender.SubKindKey,
-                    _rootPath
-                );
-                Directory.CreateDirectory(dirTrim);
-
-                string finalOutputPath = Path.Combine(dirMontage, $"{packageToRender.MontageId}.mp4");
-
-                // Apply intro to first clip
-                string firstClipPath = packageToRender.Clips.First().File;
-
-                // Prepend intro and update path in the package to point to the new trimmed file
-                await _trimService.PrependIntroAsync(
-                    introPath,
-                    firstClipPath,
-                    dirTrim
-                );
-
-                var newFirstClip = Path.Combine(dirTrim, Path.GetFileName(firstClipPath));
-                if (!File.Exists(newFirstClip))
+                foreach (var packageToRender in completedPackages.ToList())
                 {
-                    // It's possible PrependIntro wrote directly into the same location or different; handle both cases
-                    // If PrependIntro replaced file in-place, keep that path; otherwise fallback to original trimmed path
-                    newFirstClip = firstClipPath;
-                }
 
-                // Update the package's first clip path so later cleanup and youtube bag reference the correct file
-                packageToRender.Clips[0].File = newFirstClip;
+                    _logger.LogInformation(
+                        $"🎬 Rendering package: {packageToRender.MontageId} " +
+                        $"({packageToRender.KindKey}/{packageToRender.SubKindKey}, {packageToRender.Clips.Count} clips)");
 
-                // Build ordered list of clips for merging (use updated first clip path)
-                List<string> videoPaths = new List<string>();
-                videoPaths.Add(newFirstClip);
-                videoPaths.AddRange(packageToRender.Clips.Skip(1).Select(c => c.File));
+                    // Load profile for this specific kind/subkind
+                    var profile = _profileService.GetProfile(
+                        packageToRender.KindKey,
+                        packageToRender.SubKindKey
+                    );
 
-                // Merge with transitions
-                bool success = await _transitionService.MergeVideosWithTransitionsAsync(
-                    videoPaths,
-                    finalOutputPath,
-                    profile.TransitionAnimation,
-                    profile.TransitionDuration,
-                    stoppingToken
-                );
+                    string introPath = Path.Combine(_dirResources, profile.IntroFile);
+                    _logger.LogInformation($"📼 Intro path: {introPath}");
 
-                if (success)
-                {
-                    packageToRender.FinalVideoPath = finalOutputPath;
+                    // Directories for montage/trim
+                    var dirMontage = _pathService.GetMontageDir(
+                        packageToRender.KindKey,
+                        packageToRender.SubKindKey,
+                        _rootPath
+                    );
+                    Directory.CreateDirectory(dirMontage);
 
-                    var youtubeBag = JsonFileService.Load<List<MontageItem>>(_bagYoutube);
-                    // Mark package as not completed to avoid re-render; move to youtube queue
-                    packageToRender.Completed = false;
-                    youtubeBag.Add(packageToRender);
-                    JsonFileService.Save(_bagYoutube, youtubeBag);
+                    var dirTrim = _pathService.GetTrimDir(
+                        packageToRender.KindKey,
+                        packageToRender.SubKindKey,
+                        _rootPath
+                    );
+                    Directory.CreateDirectory(dirTrim);
 
-                    // Cleanup trimmed clips EXCEPT the new first clip (we already updated reference)
-                    // This prevents deleting the file we just prepended intro into
-                    foreach (var clip in packageToRender.Clips)
+                    string finalOutputPath = Path.Combine(dirMontage, $"{packageToRender.MontageId}.mp4");
+
+                    // Apply intro to first clip
+                    string firstClipPath = packageToRender.Clips.First().File;
+
+                    // Prepend intro and update path in the package to point to the new trimmed file
+                    await _trimService.PrependIntroAsync(
+                        introPath,
+                        firstClipPath,
+                        dirTrim
+                    );
+
+                    var newFirstClip = Path.Combine(dirTrim, Path.GetFileName(firstClipPath));
+                    if (!File.Exists(newFirstClip))
                     {
-                        // If the clip file equals the new first clip and exists, we still remove it because we've moved the package file
-                        // But to be safe, skip deleting if it's the same as the finalOutputPath or if it's the updated first clip that we want to keep
-                        try
-                        {
-                            if (string.Equals(clip.File, newFirstClip, StringComparison.OrdinalIgnoreCase))
-                            {
-                                // Skip deletion of the new first clip here; it's still useful as a source reference (optional)
-                                _logger.LogInformation($"ℹ️ Skipping deletion of first clip (intro merged): {clip.File}");
-                                continue;
-                            }
-
-                            if (File.Exists(clip.File))
-                            {
-                                File.Delete(clip.File);
-                                _logger.LogInformation($"🗑️ Deleted clip: {clip.File}");
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, $"Failed to delete clip {clip.File} (will continue).");
-                        }
+                        // It's possible PrependIntro wrote directly into the same location or different; handle both cases
+                        // If PrependIntro replaced file in-place, keep that path; otherwise fallback to original trimmed path
+                        newFirstClip = firstClipPath;
                     }
 
-                    // Save metadata JSON for the montage package (for records)
-                    var temp = Path.Combine(dirMontage, $"{packageToRender.MontageId}.json");
-                    JsonFileService.Save(temp, packageToRender.Clips);
+                    // Update the package's first clip path so later cleanup and youtube bag reference the correct file
+                    packageToRender.Clips[0].File = newFirstClip;
 
-                    // Remove rendered package from montage bag
-                    montageBag.Remove(packageToRender);
-                    JsonFileService.Save(_bagMontage, montageBag);
+                    // Build ordered list of clips for merging (use updated first clip path)
+                    List<string> videoPaths = new List<string>();
+                    videoPaths.Add(newFirstClip);
+                    videoPaths.AddRange(packageToRender.Clips.Skip(1).Select(c => c.File));
 
-                    _logger.LogInformation($"✅ Final video generated and moved to youtube bag: {finalOutputPath}");
-                    worker.FinalCounter += 1;
-                }
-                else
-                {
-                    _logger.LogError($"❌ Merge failed for package {packageToRender.MontageId}");
-                }
+                    // Merge with transitions
+                    bool success = await _transitionService.MergeVideosWithTransitionsAsync(
+                        videoPaths,
+                        finalOutputPath,
+                        profile.TransitionAnimation,
+                        profile.TransitionDuration,
+                        stoppingToken
+                    );
+
+                    if (success)
+                    {
+                        packageToRender.FinalVideoPath = finalOutputPath;
+
+                        var youtubeBag = JsonFileService.Load<List<MontageItem>>(_bagYoutube);
+                        // Mark package as not completed to avoid re-render; move to youtube queue
+                        packageToRender.Completed = false;
+                        youtubeBag.Add(packageToRender);
+                        JsonFileService.Save(_bagYoutube, youtubeBag);
+
+                        // Cleanup trimmed clips EXCEPT the new first clip (we already updated reference)
+                        // This prevents deleting the file we just prepended intro into
+                        foreach (var clip in packageToRender.Clips)
+                        {
+                            // If the clip file equals the new first clip and exists, we still remove it because we've moved the package file
+                            // But to be safe, skip deleting if it's the same as the finalOutputPath or if it's the updated first clip that we want to keep
+                            try
+                            {
+                                if (string.Equals(clip.File, newFirstClip, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    // Skip deletion of the new first clip here; it's still useful as a source reference (optional)
+                                    _logger.LogInformation($"ℹ️ Skipping deletion of first clip (intro merged): {clip.File}");
+                                    continue;
+                                }
+
+                                if (File.Exists(clip.File))
+                                {
+                                    File.Delete(clip.File);
+                                    _logger.LogInformation($"🗑️ Deleted clip: {clip.File}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, $"Failed to delete clip {clip.File} (will continue).");
+                            }
+                        }
+
+                        // Save metadata JSON for the montage package (for records)
+                        var temp = Path.Combine(dirMontage, $"{packageToRender.MontageId}.json");
+                        JsonFileService.Save(temp, packageToRender.Clips);
+
+                        // Remove rendered package from montage bag
+                        montageBag.Remove(packageToRender);
+                        JsonFileService.Save(_bagMontage, montageBag);
+
+                        _logger.LogInformation($"✅ Final video generated and moved to youtube bag: {finalOutputPath}");
+                        worker.FinalCounter += 1;
+                    }
+                    else
+                    {
+                        _logger.LogError($"❌ Merge failed for package {packageToRender.MontageId}");
+                    }
+                }   
             }
             catch (Exception ex)
             {

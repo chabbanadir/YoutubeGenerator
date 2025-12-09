@@ -26,6 +26,7 @@
 	<ItemGroup>
 		<Folder Include="Configuration\" />
 		<Folder Include="workspace\jobs\" />
+		<Folder Include="workspace\jobs\lol\montage\normal\" />
 	</ItemGroup>
 
 </Project>

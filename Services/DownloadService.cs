@@ -32,7 +32,7 @@ namespace YoutubeGenerator.Services
 
             try
             {
-                var (code, stdout, stderr) = await ProcessRunner.RunAsync(_ytDlpPath, args, outputDir);
+                var (code, stdout, stderr) = await ProcessRunner.RunAsync("yt-dlp", args, outputDir);
 
                 if (code != 0)
                 {

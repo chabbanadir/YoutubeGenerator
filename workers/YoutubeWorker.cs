@@ -48,110 +48,118 @@ namespace YoutubeGenerator.workers
             // -----------------------------------------------------
             // 1️⃣ METADATA GENERATION
             // -----------------------------------------------------
-            var metaItem = bag.FirstOrDefault(x => x.Completed == false);
-            if (metaItem != null)
-            {
-                try
+            //var metaItem = bag.FirstOrDefault(x => x.Completed == false);
+
+            foreach(var metaItem in bag.Where(x => x.Completed == false).ToList()) { 
+                if (metaItem != null)
                 {
-                    _logger.LogInformation($"📝 Generating metadata for montage {metaItem.MontageId}");
+                    try
+                    {
+                        _logger.LogInformation($"📝 Generating metadata for montage {metaItem.MontageId}");
 
-                    var profile = _montageProfileService.GetProfile(metaItem.KindKey, metaItem.SubKindKey);
+                        var profile = _montageProfileService.GetProfile(metaItem.KindKey, metaItem.SubKindKey);
 
-                    var gen = await _llamaService.GenerateMetadataAsync(metaItem, profile);
+                        var gen = await _llamaService.GenerateMetadataAsync(metaItem, profile);
 
-                    metaItem.GeneratedTitle = gen.Title;
-                    metaItem.GeneratedDescription = gen.Description;
-                    metaItem.Completed = true;
+                        metaItem.GeneratedTitle = gen.Title;
+                        metaItem.GeneratedDescription = gen.Description;
 
-                    JsonFileService.Save(_bagYoutube, bag);
-                }
-                catch (Exception ex)
-                {
-                    bagFailed.Add(metaItem);
-                    bag.Remove(metaItem);
+                        JsonFileService.Save(_bagYoutube, bag);
+                        try
+                        {
+                            var creds = _montageProfileService.GetYoutubeCredentials(metaItem.KindKey);
 
-                    JsonFileService.Save(_bagYoutube, bag);
-                    JsonFileService.Save(_bagYoutubeFailed, bagFailed);
+                            // prevent concurrency
+                            if (creds.UploadConfig.Enabled)
+                            {
+                                _logger.LogWarning($"⚠ Upload for {metaItem.KindKey} already running. Skipping.");
+                                return;
+                            }
 
-                    _logger.LogError(ex, "❌ Metadata generation failed");
-                    return;
+                            // set upload lock
+                            creds.UploadConfig.Enabled = true;
+                            _montageProfileService.SaveYoutubeCredentials(metaItem.KindKey, creds);
+
+                            // format description before upload
+                            metaItem.GeneratedDescription = TextFormatter.FixDescription(metaItem.GeneratedDescription);
+                            JsonFileService.Save(_bagYoutube, bag);
+
+                            // compute schedule time
+                            DateTime publishTime = creds.UploadConfig.LastUploadTime.AddHours(creds.UploadConfig.MinDelayHours);
+
+                            _logger.LogInformation(
+                                $"📤 Uploading montage {metaItem.MontageId}  start — publish at {publishTime}");
+
+                            string videoId = await _uploader.UploadAsync(
+                                metaItem.FinalVideoPath,
+                                metaItem.GeneratedTitle,
+                                metaItem.GeneratedDescription,
+                                creds,
+                                publishTime
+                            );
+
+                            // update stats
+                            creds.UploadConfig.LastUploadTime = publishTime;
+                            creds.UploadConfig.UploadCounter++;
+                            creds.UploadConfig.Enabled = false;
+                            _montageProfileService.SaveYoutubeCredentials(metaItem.KindKey, creds);
+                            metaItem.Completed = true;
+
+                            // move to DONE
+                            metaItem.MontageId = videoId;
+                            bagDone.Add(metaItem);
+                            bag.Remove(metaItem);
+
+                            JsonFileService.Save(_bagYoutube, bag);
+                            JsonFileService.Save(_bagYoutubeDone, bagDone);
+
+                            _logger.LogInformation($"✅ Upload complete: {videoId}");
+
+
+                        }
+                        catch (Exception ex)
+                        {
+                            bagFailed.Add(metaItem);
+                            bag.Remove(metaItem);
+
+                            JsonFileService.Save(_bagYoutube, bag);
+                            JsonFileService.Save(_bagYoutubeFailed, bagFailed);
+
+                            _logger.LogError(ex, "❌ Upload failed");
+
+                            // remove upload lock
+                            var creds = _montageProfileService.GetYoutubeCredentials(metaItem.KindKey);
+                            creds.UploadConfig.Enabled = false;
+                            _montageProfileService.SaveYoutubeCredentials(metaItem.KindKey, creds);
+
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        bagFailed.Add(metaItem);
+                        bag.Remove(metaItem);
+
+                        JsonFileService.Save(_bagYoutube, bag);
+                        JsonFileService.Save(_bagYoutubeFailed, bagFailed);
+
+                        _logger.LogError(ex, "❌ Metadata generation failed");
+                        return;
+                    }
                 }
             }
 
             // -----------------------------------------------------
             // 2️⃣ UPLOAD PROCESS
             // -----------------------------------------------------
-            var uploadItem = bag.FirstOrDefault(x => x.Completed == true);
-            if (uploadItem != null)
-            {
-                try
-                {
-                    var creds = _montageProfileService.GetYoutubeCredentials(uploadItem.KindKey);
-
-                    // prevent concurrency
-                    if (creds.UploadConfig.Enabled)
-                    {
-                        _logger.LogWarning($"⚠ Upload for {uploadItem.KindKey} already running. Skipping.");
-                        return;
-                    }
-
-                    // set upload lock
-                    creds.UploadConfig.Enabled = true;
-                    _montageProfileService.SaveYoutubeCredentials(uploadItem.KindKey, creds);
-
-                    // format description before upload
-                    uploadItem.GeneratedDescription = TextFormatter.FixDescription(uploadItem.GeneratedDescription);
-                    JsonFileService.Save(_bagYoutube, bag);
-
-                    // compute schedule time
-                    DateTime publishTime = creds.UploadConfig.LastUploadTime.AddHours(creds.UploadConfig.MinDelayHours);
-
-                    _logger.LogInformation(
-                        $"📤 Uploading montage {uploadItem.MontageId} — publish at {publishTime}");
-
-                    string videoId = await _uploader.UploadAsync(
-                        uploadItem.FinalVideoPath,
-                        uploadItem.GeneratedTitle,
-                        uploadItem.GeneratedDescription,
-                        creds,
-                        publishTime
-                    );
-
-                    // update stats
-                    creds.UploadConfig.LastUploadTime = publishTime;
-                    creds.UploadConfig.UploadCounter++;
-                    creds.UploadConfig.Enabled = false;
-                    _montageProfileService.SaveYoutubeCredentials(uploadItem.KindKey, creds);
-
-                    // move to DONE
-                    uploadItem.MontageId = videoId;
-                    bagDone.Add(uploadItem);
-                    bag.Remove(uploadItem);
-
-                    JsonFileService.Save(_bagYoutube, bag);
-                    JsonFileService.Save(_bagYoutubeDone, bagDone);
-
-                    _logger.LogInformation($"✅ Upload complete: {videoId}");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    bagFailed.Add(uploadItem);
-                    bag.Remove(uploadItem);
-
-                    JsonFileService.Save(_bagYoutube, bag);
-                    JsonFileService.Save(_bagYoutubeFailed, bagFailed);
-
-                    _logger.LogError(ex, "❌ Upload failed");
-
-                    // remove upload lock
-                    var creds = _montageProfileService.GetYoutubeCredentials(uploadItem.KindKey);
-                    creds.UploadConfig.Enabled = false;
-                    _montageProfileService.SaveYoutubeCredentials(uploadItem.KindKey, creds);
-
-                    return;
-                }
-            }
+            //foreach (var metaItem in bag.Where(x => x.Completed == true).ToList())
+            //{
+            //    if (metaItem != null)
+            //    {
+                   
+            //    }
+            //}
+            return;
         }
     }
 }

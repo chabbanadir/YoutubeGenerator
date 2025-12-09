@@ -59,7 +59,7 @@ namespace YoutubeGenerator.Services
                 "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
                 $"\"{outputPath}\"";
 
-            var (code, stdout, stderr) = await ProcessRunner.RunAsync(_ffmpegPath, args, outputDir);
+            var (code, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", args, outputDir);
 
             if (code != 0)
                 throw new Exception($"FFmpeg TRIM failed:\n{stderr}");
@@ -95,7 +95,7 @@ namespace YoutubeGenerator.Services
                 "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
                 $"\"{tempOut}\"";
 
-            await ProcessRunner.RunAsync(_ffmpegPath, args);
+            await ProcessRunner.RunAsync("ffmpeg", args);
 
             File.Delete(filePath);
             File.Move(tempOut, filePath);
@@ -131,7 +131,7 @@ namespace YoutubeGenerator.Services
 
             var psi = new ProcessStartInfo
             {
-                FileName = _ffmpegPath,
+                FileName = "ffmpeg",
                 Arguments = args,
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,

@@ -9,6 +9,8 @@
         public string BagYoutubePath { get; set; } = "bag_youtube.json";
         public string BagYoutubeFailedPath { get; set; } = "bag_youtube_failed.json";
         public string BagYoutubeDonePath { get; set; } = "bag_youtube_done.json";
+        public string BagHistoryPath { get; set; } = "bag_history.json";
+
         public string BagFailed { get; set; } = "bag_failed.json";
         public string WorkerFile { get; set; } = "worker_collect.json";
         public string MontageFile { get; set; } = "worker_montage.json";

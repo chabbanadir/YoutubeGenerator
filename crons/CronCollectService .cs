@@ -25,17 +25,12 @@ namespace YoutubeGenerator.crons
                 using var scope = _scopeFactory.CreateScope(); // ✅ un nouveau scope
 
                 var collectWorker = scope.ServiceProvider.GetRequiredService<CollectWorker>();
-                var montageWorker = scope.ServiceProvider.GetRequiredService<MontageWorker>();
-                var youtubeWorker = scope.ServiceProvider.GetRequiredService<YoutubeWorker>();
+               
                 await collectWorker.RunAsync(stoppingToken); // appel du worker !
 
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                //await Task.Delay(TimeSpan.FromHours(2), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
-                await montageWorker.RunAsync(stoppingToken); // appel du worker !
-
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-                await youtubeWorker.RunAsync(); // appel du worker !
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
 
             }
         }

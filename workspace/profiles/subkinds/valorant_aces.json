@@ -1,0 +1,8 @@
+{
+  "KindKey": "valorant",
+  "SubKindKey": "aces",
+  "IntroFile": "ressources/intro_lol.mp4",
+  "TransitionAnimation": "fade",
+  "TransitionDuration": 2,
+  "MinMontageMinutes": 12
+}

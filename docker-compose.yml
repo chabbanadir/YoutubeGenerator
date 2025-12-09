@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  youtube-generator:
+    build: .
+    container_name: youtube_generator
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./workspace:/app/workspace:rw
+      - ./appsettings.production.json:/app/appsettings.Production.json:ro  # optional override
+    environment:
+      # .NET environment
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - Tools__YtDlpPath=/usr/bin/yt-dlp
+      # Application configuration (secure injection)
+      - Google__ApiKey=${GOOGLE_API_KEY}
+      - GitHub__Token=${GITHUB_TOKEN}
+
+
+    # Option A: use env_file to inject secrets
+    env_file:
+      - .env
+
+    # Optional: resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2048M
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+# optional networks or other services (db, redis...) can be added here

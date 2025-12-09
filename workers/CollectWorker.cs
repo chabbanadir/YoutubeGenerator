@@ -28,6 +28,7 @@ namespace YoutubeGenerator.Workers
         private readonly string _bagTrim;
         private readonly string _bagMontage;
         private readonly string _bagFailed;
+        private readonly string _bagHistory;
 
         private readonly int n;
 
@@ -68,6 +69,7 @@ namespace YoutubeGenerator.Workers
             _bagMontage = Path.Combine(_dirBags, cfgValue.BagMontagePath);
             _workerFile = Path.Combine(_dirBags, cfgValue.WorkerFile);
             _bagFailed = Path.Combine(_dirBags, cfgValue.BagFailed);
+            _bagHistory = Path.Combine(_dirBags, cfgValue.BagHistoryPath);
 
             // REGISTER THE SHUTDOWN HOOK
             _appLifetime.ApplicationStopping.Register(() =>
@@ -102,11 +104,14 @@ namespace YoutubeGenerator.Workers
 
             worker.Status = true;
             JsonFileService.Save(_workerFile, worker);
+            var trimBag = JsonFileService.Load<List<TrimResult>>(_bagTrim);
+            // Load the failed bag
+            var failedBag = JsonFileService.Load<List<ClipInfo>>(_bagFailed);
 
             try
             {
                 // 1. TENTATIVE DE REMPLISSAGE (Phase 0)
-                var tempBag = JsonFileService.Load<List<ClipInfo>>(_bagTemp);
+                //var tempBag = JsonFileService.Load<List<ClipInfo>>(_bagTemp);
                 var downloadBag = JsonFileService.Load<List<ClipInfo>>(_bagSource);
 
                 if (downloadBag.Count == 0)
@@ -118,119 +123,145 @@ namespace YoutubeGenerator.Workers
 
                     if (items.Count > 0)
                     {
-                        downloadBag.AddRange(items);
-                        JsonFileService.Save(_bagSource, downloadBag);
+                        // 1️⃣ Load history
+                        var historyBag = JsonFileService.Load<List<ClipInfo>>(_bagHistory);
 
-                        // Clear remote CSV
-                        await _githubCsvFetcher.ClearCsvAsync();
-                        _logger.LogInformation($"🧹 Remote CSV cleared ({items.Count} items imported)");
+                        // 2️⃣ Drop old entries (>10 days)
+                        var threshold = DateTime.UtcNow.AddDays(-10);
+                        int before = historyBag.Count;
+
+                        historyBag = historyBag
+                            .Where(h => h.ImportedAt >= threshold)
+                            .ToList();
+
+                        if (before != historyBag.Count)
+                            _logger.LogInformation($"🧹 History pruned: Before={before}, After={historyBag.Count}");
+
+                        // 3️⃣ Save cleaned history
+                        JsonFileService.Save(_bagHistory, historyBag);
+
+                        // 4️⃣ Build fast lookup dedupe index
+                        var existing = new HashSet<string>(historyBag.Select(h => h.UniqueKey()));
+
+                        // 5️⃣ Filter unique items
+                        var uniqueItems = items
+                            .Where(c => !existing.Contains(c.UniqueKey()))
+                            .ToList();
+
+                        _logger.LogInformation(
+                            $"🧠 Dedupe: Received={items.Count}, Unique={uniqueItems.Count}, Removed={items.Count - uniqueItems.Count}"
+                        );
+
+                        if (uniqueItems.Count > 0)
+                        {
+                            // 6️⃣ Add into download bag
+                            downloadBag.AddRange(uniqueItems);
+                            JsonFileService.Save(_bagSource, downloadBag);
+
+                            // 7️⃣ Add to history with timestamp
+                            foreach (var u in uniqueItems)
+                                u.ImportedAt = DateTime.UtcNow;
+
+                            historyBag.AddRange(uniqueItems);
+                            JsonFileService.Save(_bagHistory, historyBag);
+
+                            // 8️⃣ Clear CSV file on GitHub
+                            await _githubCsvFetcher.ClearCsvAsync();
+                            _logger.LogInformation($"🧹 Remote CSV cleared.");
+                        }
+                        else
+                        {
+                            _logger.LogInformation("🟦 No unique clips to import — all duplicates.");
+                        }
                     }
                     else
                     {
                         _logger.LogInformation("CSV was empty — nothing to import.");
                     }
                 }
-                if (tempBag.Count == 0)
-                {
-                    if (downloadBag.Count > 0)
+                else {
+
+                    // --------------------------------------------------------
+                    // PHASE 1 : TRAITEMENT DES CLIPS INDIVIDUELS
+                    // --------------------------------------------------------
+
+                    
+                    for (int i = downloadBag.Count - 1; i >= 0; i--)
                     {
-                        var itemsToMove = downloadBag.Take(n).ToList();
-                        tempBag.AddRange(itemsToMove);
-                        downloadBag = downloadBag.Skip(n).ToList();
-                        JsonFileService.Save(_bagTemp, tempBag);
-                        JsonFileService.Save(_bagSource, downloadBag);
-                    }
-                    // On ne retourne plus ici! On continue vers le traitement.
-                }
+                        if (cancellationToken.IsCancellationRequested) break;
 
-                // 2. CLAUSE DE GARDE GLOBALE
-                if (tempBag.Count == 0)
-                {
-                    _logger.LogInformation("Le Temp Bag est vide. Pas de travail à effectuer.");
-                    return; // Sortie élégante si rien n'a pu être chargé.
-                }
+                        var clip = downloadBag[i];
+                        _logger.LogInformation($"🚀 Processing clip {i}: {clip.Link}");
 
-                // --------------------------------------------------------
-                // PHASE 1 : TRAITEMENT DES CLIPS INDIVIDUELS
-                // --------------------------------------------------------
+                        // Get correct directories
+                        var dirRaw = _pathService.GetRawDir(clip.KindKey, clip.SubKindKey, _rootPath);
+                        var dirTrim = _pathService.GetTrimDir(clip.KindKey, clip.SubKindKey, _rootPath);
 
-                var trimBag = JsonFileService.Load<List<TrimResult>>(_bagTrim);
-                // Load the failed bag
-                var failedBag = JsonFileService.Load<List<ClipInfo>>(_bagFailed);
-                for (int i = tempBag.Count - 1; i >= 0; i--)
-                {
-                    if (cancellationToken.IsCancellationRequested) break;
+                        // 🔹 STEP 1 — DOWNLOAD
+                        var downloadResult = await _download.DownloadAsync(clip, dirRaw, worker.DownloadCounter);
 
-                    var clip = tempBag[i];
-                    _logger.LogInformation($"🚀 Processing clip {i}: {clip.Link}");
-
-                    // Get correct directories
-                    var dirRaw = _pathService.GetRawDir(clip.KindKey, clip.SubKindKey, _rootPath);
-                    var dirTrim = _pathService.GetTrimDir(clip.KindKey, clip.SubKindKey, _rootPath);
-
-                    // 🔹 STEP 1 — DOWNLOAD
-                    var downloadResult = await _download.DownloadAsync(clip, dirRaw, worker.DownloadCounter);
-
-                    if (!downloadResult.Success)
-                    {
-                        _logger.LogWarning($"⚠️ Download failed for clip {i}. Reason: {downloadResult.ErrorType}");
-                        clip.Description += $" [FAILED: {downloadResult.ErrorType}]";
-                        failedBag.Add(clip);
-                        tempBag.RemoveAt(i);
-
-                        JsonFileService.Save(_bagFailed, failedBag);
-                        JsonFileService.Save(_bagTemp, tempBag);
-                        continue;
-                    }
-
-                    worker.DownloadCounter++;
-                    string rawFilePath = downloadResult.FilePath;
-
-                    try
-                    {
-                        // 🔹 STEP 2 — TRIM + NORMALIZE (1 single operation)
-                        var trimResult =
-                            await _trim.TrimAsync(rawFilePath, clip, dirTrim, worker.TrimCounter);
-
-                        worker.TrimCounter++;
-
-                        // Copy metadata
-                        trimResult.KindKey = clip.KindKey ?? "";
-                        trimResult.SubKindKey = clip.SubKindKey ?? "";
-
-                        // 🔹 STEP 3 — GET DURATION
-                        trimResult.Duration =
-                            await _transition.GetVideoDurationAsync(trimResult.File);
-
-                        // Add to trim bag
-                        trimBag.Add(trimResult);
-
-                        // Remove raw file
-                        if (File.Exists(rawFilePath))
-                            File.Delete(rawFilePath);
-
-                        // Remove from temp bag
-                        tempBag.RemoveAt(i);
-
-                        // SAVE STATE
-                        JsonFileService.Save(_bagTrim, trimBag);
-                        JsonFileService.Save(_bagTemp, tempBag);
-                        JsonFileService.Save(_workerFile, worker);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, $"🚨 Trim/Process failed for clip {i}.");
-                    }
-                    finally
-                    {
-                        // Always clean raw file safely
-                        if (File.Exists(rawFilePath))
+                        if (!downloadResult.Success)
                         {
-                            File.Delete(rawFilePath);
-                            _logger.LogInformation($"🗑️ Deleted raw file {rawFilePath}");
+                            _logger.LogWarning($"⚠️ Download failed for clip {i}. Reason: {downloadResult.ErrorType}");
+                            clip.Description += $" [FAILED: {downloadResult.ErrorType}]";
+                            failedBag.Add(clip);
+                            downloadBag.RemoveAt(i);
+
+                            JsonFileService.Save(_bagFailed, failedBag);
+                            JsonFileService.Save(_bagTemp, downloadBag);
+                            continue;
+                        }
+
+                        worker.DownloadCounter++;
+                        string rawFilePath = downloadResult.FilePath;
+
+                        try
+                        {
+                            // 🔹 STEP 2 — TRIM + NORMALIZE (1 single operation)
+                            var trimResult =
+                                await _trim.TrimAsync(rawFilePath, clip, dirTrim, worker.TrimCounter);
+
+                            worker.TrimCounter++;
+
+                            // Copy metadata
+                            trimResult.KindKey = clip.KindKey ?? "";
+                            trimResult.SubKindKey = clip.SubKindKey ?? "";
+
+                            // 🔹 STEP 3 — GET DURATION
+                            trimResult.Duration =
+                                await _transition.GetVideoDurationAsync(trimResult.File);
+
+                            // Add to trim bag
+                            trimBag.Add(trimResult);
+
+                            // Remove raw file
+                            if (File.Exists(rawFilePath))
+                                File.Delete(rawFilePath);
+
+                            // Remove from temp bag
+                            downloadBag.RemoveAt(i);
+
+                            // SAVE STATE
+                            JsonFileService.Save(_bagTrim, trimBag);
+                            JsonFileService.Save(_bagSource, downloadBag);
+                            JsonFileService.Save(_workerFile, worker);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, $"🚨 Trim/Process failed for clip {i}.");
+                        }
+                        finally
+                        {
+                            // Always clean raw file safely
+                            if (File.Exists(rawFilePath))
+                            {
+                                File.Delete(rawFilePath);
+                                _logger.LogInformation($"🗑️ Deleted raw file {rawFilePath}");
+                            }
                         }
                     }
                 }
+
 
 
 

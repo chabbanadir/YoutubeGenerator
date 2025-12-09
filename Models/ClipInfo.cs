@@ -21,6 +21,13 @@ namespace YoutubeGenerator.Models
 
         [JsonPropertyName("SubKindKey")]
         public string SubKindKey { get; set; } = "default";
+
+        public DateTime? ImportedAt { get; set; } = DateTime.UtcNow;
+
+        public string UniqueKey()
+        {
+            return $"{Link}::{KindKey}::{SubKindKey}".ToLower();
+        }
     }
 }
 /*

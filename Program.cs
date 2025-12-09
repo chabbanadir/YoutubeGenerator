@@ -37,6 +37,7 @@ builder.Services.AddScoped<YoutubeWorker>();
 
 // Cron = toujours Singleton
 builder.Services.AddHostedService<CronCollectService>();
+builder.Services.AddHostedService<CronMontageUploadService>();
 
 // API
 builder.Services.AddControllers();
