@@ -2,7 +2,7 @@
 {
     public interface IGitHubCsvFetcher
     {
-        Task<Stream> DownloadCsvAsync();
+        Task<string> DownloadCsvAsync(CancellationToken ct = default);
         Task ClearCsvAsync();
     }
 }

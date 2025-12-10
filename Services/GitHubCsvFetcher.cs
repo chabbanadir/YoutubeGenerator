@@ -1,12 +1,13 @@
-﻿using System.Text.Json;
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
+using System.Text.Json;
 using YoutubeGenerator.Interfaces;
 
 namespace YoutubeGenerator.Services
 {
     public class GitHubCsvFetcher : IGitHubCsvFetcher
     {
-        private readonly HttpClient _http;
+        private readonly HttpClient _rawHttp;
+        private readonly HttpClient _apiHttp;
         private readonly ILogger<GitHubCsvFetcher> _logger;
 
         private const string Owner = "chabbanadir";
@@ -17,30 +18,44 @@ namespace YoutubeGenerator.Services
         {
             _logger = logger;
 
-            _http = new HttpClient();
-
-            // Load token
             string token = config["GitHub:Token"];
+
+            // HTTP client pour RAW
+            _rawHttp = new HttpClient();
+            _rawHttp.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("text/plain"));
+            _rawHttp.DefaultRequestHeaders.UserAgent.ParseAdd("YoutubeGeneratorBot");
+
+            // HTTP client pour API GitHub
+            _apiHttp = new HttpClient();
+            _apiHttp.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+            _apiHttp.DefaultRequestHeaders.UserAgent.ParseAdd("YoutubeGeneratorBot");
+
             if (!string.IsNullOrWhiteSpace(token))
             {
-                _http.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", token); // correct
+                _apiHttp.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", token);
             }
-
-            _http.DefaultRequestHeaders.UserAgent.ParseAdd("YoutubeGeneratorBot");
-            _http.DefaultRequestHeaders.Accept.Add(
-                new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         }
 
-        public async Task<Stream> DownloadCsvAsync()
+        // Retourne un STRING et plus un stream
+        public async Task<string> DownloadCsvAsync(CancellationToken ct = default)
         {
-            var url = $"https://raw.githubusercontent.com/{Owner}/{Repo}/main/{FilePath}";
+            string url =
+                $"https://raw.githubusercontent.com/{Owner}/{Repo}/main/{FilePath}?t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+
             _logger.LogWarning($"🌐 Fetching CSV from: {url}");
 
-            var resp = await _http.GetAsync(url);
+            var resp = await _rawHttp.GetAsync(url, ct);
             resp.EnsureSuccessStatusCode();
 
-            return await resp.Content.ReadAsStreamAsync();
+            string content = await resp.Content.ReadAsStringAsync(ct);
+
+            if (string.IsNullOrWhiteSpace(content))
+                _logger.LogWarning("⚠ CSV empty or whitespace");
+
+            return content;
         }
 
         public async Task ClearCsvAsync()
@@ -50,15 +65,13 @@ namespace YoutubeGenerator.Services
 
             _logger.LogWarning($"🧹 Clearing CSV via API: {apiUrl}");
 
-            // 1️⃣ Get current file SHA
-            var metaResp = await _http.GetAsync(apiUrl);
+            var metaResp = await _apiHttp.GetAsync(apiUrl);
             metaResp.EnsureSuccessStatusCode();
 
             var metaJson = await metaResp.Content.ReadAsStringAsync();
             var meta = JsonSerializer.Deserialize<GitHubMeta>(metaJson);
 
-            // 2️⃣ Build new CSV content
-            var newContent = "Link,Description,Start,End,KindKey,SubKindKey\n";
+            string newContent = "Link,Description,Start,End,KindKey,SubKindKey\n";
 
             var payload = new
             {
@@ -68,10 +81,10 @@ namespace YoutubeGenerator.Services
             };
 
             var json = JsonSerializer.Serialize(payload);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            var content = new StringContent(json);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-            // 3️⃣ PUT update to GitHub
-            var result = await _http.PutAsync(apiUrl, content);
+            var result = await _apiHttp.PutAsync(apiUrl, content);
             result.EnsureSuccessStatusCode();
         }
 
