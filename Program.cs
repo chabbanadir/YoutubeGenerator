@@ -50,6 +50,8 @@ var app = builder.Build();
 // ----------------------
 // Middleware
 // ----------------------
+app.UseSwagger();   // Serves the OpenAPI specification file (e.g., swagger.json)
+app.UseSwaggerUI();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

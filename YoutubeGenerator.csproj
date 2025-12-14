@@ -20,13 +20,18 @@
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
 		<PackageReference Include="System.IO.Abstractions" Version="22.0.16" />
-
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
 	</ItemGroup>
-
+	
 	<ItemGroup>
 		<Folder Include="Configuration\" />
 		<Folder Include="workspace\jobs\" />
 		<Folder Include="workspace\jobs\lol\montage\normal\" />
 	</ItemGroup>
 
+	<PropertyGroup>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);1591</NoWarn>
+	</PropertyGroup>
+	
 </Project>

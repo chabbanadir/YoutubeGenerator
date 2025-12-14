@@ -26,13 +26,13 @@ namespace YoutubeGenerator.Services
         }
 
         public async Task<MontageLLMResult> GenerateMetadataAsync(
-              MontageItem package,
-              MontageProfile profile
-          )
+                      MontageItem package,
+                      MontageProfile profile
+                    )
         {
             var result = new MontageLLMResult();
 
-            // --- 1. Generate Title ---
+            // --- 1. Generate Title (Same as before) ---
             var titleRequest = new GenerateContentRequest();
             titleRequest.AddText(BuildTitlePrompt(package, profile));
             titleRequest.UseJsonMode<TitleResult>();
@@ -42,16 +42,20 @@ namespace YoutubeGenerator.Services
             result.Title = titleResult?.Title ?? "Default Title";
 
 
-            // --- 2. Generate Description ---
+            // --- 2. Generate Description (Corrected Logic) ---
             var socialMediaBlock = BuildSocialMediaBlock(profile);
             var descRequest = new GenerateContentRequest();
-            descRequest.AddText(BuildDescriptionPrompt(package, profile, socialMediaBlock));
+
+            // Pass the placeholder to the prompt builder
+            descRequest.AddText(BuildDescriptionPrompt(package, profile));
             descRequest.UseJsonMode<DescriptionResult>();
 
             var descResponse = await _model.GenerateContentAsync(descRequest);
             var descResult = descResponse.ToObject<DescriptionResult>();
-            result.Description = descResult?.Description ?? "Default Description";
 
+            // --- CRITICAL FIX: Use the constant to replace the placeholder ---
+            var rawDescription = descResult?.Description ?? "Default Description";
+            result.Description = rawDescription;
             return result;
         }
 
@@ -97,7 +101,7 @@ Return STRICT JSON ONLY, following exactly:
   ""title"": ""string""
 }}
 
-The title must be concise and engaging, including key players or themes from the timestamps. **Include a few relevant emojis in the title.**
+The title must be SEO Friendly, concise and engaging, including key players or themes from the timestamps. **Include a few relevant emojis in the title.**
 
 MONTAGE DATA:
 {pkg.ToPromptString()}
@@ -107,86 +111,60 @@ Game: {profile.KindKey}, Style: {profile.SubKindKey}
         }
 
         // ⭐️ Modified signature to accept the pre-formatted social media block
-        private string BuildDescriptionPrompt(MontageItem pkg, MontageProfile profile, string socialMediaBlock)
+        private string BuildDescriptionPrompt(MontageItem pkg, MontageProfile profile)
         {
-            var socialMediaPlaceholder = "###SOCIAL_MEDIA_LINKS###";
+            var attributionBlock = "Clip used with permission/fair use - all credit to original streamer"; // NEW BLOCK
 
             return $@"
-You are an AI system generating YouTube descriptions with **strict formatting requirements**.
-Return **ONLY JSON**, with the structure:
+            You are an AI system generating YouTube descriptions with a **stylized and streamer-focused tone**.
+            Return **ONLY JSON**, with the structure:
 
-{{
-  ""description"": ""string""
-}}
+            {{
+              ""description"": ""string""
+            }}
 
-### DESCRIPTION FORMAT RULES (STRICT)
+            ### DESCRIPTION FORMAT RULES (MODIFIED)
 
-Your generated description MUST follow **this exact structure**, using **real newline characters (\n)**:
+            Your generated description MUST follow **this general structure**, using **real newline characters (\n)**:
 
-1. **Opening Hook (1–2 lines)**  
-   - Very engaging  
-   - Includes at least **2 relevant emojis**  
-   - Game-themed wording
+            1. **Opening Hook (1–2 lines)** - Very engaging, including **2-3 relevant emojis**.  
+                - Must use a strong, direct hook (e.g., 'Another epic moment' or 'Get ready to laugh').
+                - Must be SEO Friendly.
+                
 
-2. **Short Summary (1–2 lines)**  
-   - General explanation of what the viewer will see  
+            2. **Video Summary (2–5 lines)** - Explain the content (e.g., 'compilation of the best recent plays' OR 'hilarious, frustrating fails').  
+                - The tone must match the 'Style: {profile.SubKindKey}' (e.g., **aggressive/hype** for highlights, **humorous/self-deprecating** for fails).
 
-3. **Timestamps Section (MULTILINE)**  
-   MUST be formatted exactly:
-Timestamps:
-00:00 - First event
-00:25 - Second event
-01:12 - Another play
-- Each timestamp MUST be on its own line  
-- NO '*' bullets, NO inline timestamps  
-- STRICT multiline formatting
+            3. **Timestamps/Chapters Section (MULTILINE, OPTIONAL)** - Format MUST be exactly: 'Chapitres dans la vidéo :' followed by the list.
+                - If the video contains a compilation of distinct streamers/moments, include them. If not, omit this block.
+                - Example: 'Chapitres dans la vidéo :\n0:00 Thebausffs\n3:51 Solarbacca'
 
-4. **Social Media Block**  
-Insert the content here: {socialMediaPlaceholder}  
-If the provided block is empty, OMIT this section entirely.  
-Social media block must stay on MULTIPLE LINES.
+            4. **Attribution Block (STRICT CONTENT)** - You **MUST** insert the following line EXACTLY:
+                {attributionBlock}
+            
+            5. **Add a list of streamears twitch link.
+                - https://www.twitch.tv/clips(i).description 
+                - clips(i).description is elementes on {pkg.Clips}.
 
-5. **Call To Action (1–2 lines)**  
-Example:  
-""Be sure to like, comment, and subscribe for more epic highlights!""
+            6. **Call To Action & Hashtags (1-2 lines total)** - Include a short call to action (e.g., 'Drop your rank in comments!').  
+                - Add **10-15 highly relevant hashtags** at the end of this block.
 
-6. **Hashtags Section (1 line)**  
-- All hashtags on ONE LINE  
-- At least **15 highly relevant hashtags**  
-- No line breaks inside the hashtags line
+           
 
-IMPORTANT:
-- Use REAL newline characters (\n) inside the ""description"" field.
-- Do NOT escape them (no \\n).
-- This will be placed directly into YouTube description.
+            IMPORTANT:
+            - Use REAL newline characters (\n) inside the ""description"" field.
+            - Do NOT escape them (no \\n).
+            - The overall length should be shorter and punchier than previous attempts.
+            - use always double newline btw paragraphs 
+            MONTAGE DATA:
+            {pkg.ToPromptString()}
+    
+            VIDEO CONTEXT:
+            Game: {profile.KindKey}  
+            Style: {profile.SubKindKey} **(Crucial: Use this to determine the tone!)**
 
-MONTAGE DATA:
-{pkg.ToPromptString()}
 
-VIDEO CONTEXT:
-Game: {profile.KindKey}  
-Style: {profile.SubKindKey}
-
-SOCIAL MEDIA LINKS PROVIDED:
-{socialMediaBlock}
-
-EXAMPLE (FORMAT ONLY — NOT CONTENT):
----
-🚀 Watch the most insane plays from the Rift! 🔥😱  
-These highlights showcase clutch outplays and high-level mechanics.
-
-Timestamps:
-00:00 - Massive teamfight on Dragon
-00:34 - Perfect flash combo from Faker
-01:22 - Pentakill cleanup by Viper
-
-{socialMediaPlaceholder}
-
-Be sure to leave a like and subscribe for more League of Legends content!
-
-#LeagueOfLegends #LoLMontage #LOLHighlights #Gaming #Esports #ClutchPlays #LeaguePlays #Ranked #Challenger #Season14 #RiftHighlights #ProPlayers #BestPlays #EpicMoments #ChampionPlays
----
-";
+            ";
         }
     }
 }

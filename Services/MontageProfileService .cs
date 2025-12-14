@@ -6,19 +6,21 @@ namespace YoutubeGenerator.Services
 {
     public class MontageProfileService : IMontageProfileService
     {
+        private readonly ILogger<MontageProfileService> _logger ;
         private readonly string _rootDir;
         private readonly string _kindsDir;
         private readonly string _subKindsDir;
 
-        public MontageProfileService(IWebHostEnvironment env)
+        public MontageProfileService(IWebHostEnvironment env, ILogger<MontageProfileService> logger)
         {
             _rootDir = Path.Combine(env.ContentRootPath, "workspace", "profiles");
-
+            _logger = logger;
             _kindsDir = Path.Combine(_rootDir, "kinds");
             _subKindsDir = Path.Combine(_rootDir, "subkinds");
 
             Directory.CreateDirectory(_kindsDir);
             Directory.CreateDirectory(_subKindsDir);
+            _logger = logger;
         }
 
         // -----------------------------
@@ -28,9 +30,11 @@ namespace YoutubeGenerator.Services
         {
             string file = Path.Combine(_subKindsDir, $"{kindKey}_{subKindKey}.json");
 
-            if (!File.Exists(file))
-                throw new Exception($"Missing profile for {kindKey}/{subKindKey}");
-
+            if (!File.Exists(file)){
+                _logger.LogInformation($"Missing profile for {kindKey}/{subKindKey}");
+                string normal = Path.Combine(_subKindsDir, $"{kindKey}_normal.json");
+                return JsonFileService.Load<MontageProfile>(normal);
+            }
             return JsonFileService.Load<MontageProfile>(file);
         }
 
