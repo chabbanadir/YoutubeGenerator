@@ -365,6 +365,7 @@ FodyWeavers.xsd
 # --- Données Générées (Vidéos, etc.) ---
 # On ignore le dossier jobs qui est DANS workspace
 workspace/jobs/
+workspace/bags/
 
 # On ignore aussi les "bags" (sacs de données/logs)
 #workspace/bags/
