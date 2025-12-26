@@ -367,8 +367,5 @@ FodyWeavers.xsd
 workspace/jobs/
 workspace/bags/
 
-# On ignore aussi les "bags" (sacs de données/logs)
-#workspace/bags/
-
 # --- Configuration (Secrets) ---
 #appSettings.json
