@@ -96,7 +96,7 @@ namespace YoutubeGenerator.Services
 
                     // map and encode: libx264 for video, keep audio as PCM during merge
                     "-map \"[vout]\" -map \"[aout]\" " +
-                    "-c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p " +
+                    "-c:v libx265 -preset ultrafast -crf 30 -pix_fmt yuv420p " +
                     "-c:a pcm_s16le " +
                     $"-y \"{temp}\"";
 

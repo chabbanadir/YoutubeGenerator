@@ -22,6 +22,7 @@ namespace YoutubeGenerator.crons
 
             while (!stoppingToken.IsCancellationRequested)
             {
+                _logger.LogInformation($"## CRON Montage & Upload : Time check = {DateTime.UtcNow}");
                 using var scope = _scopeFactory.CreateScope(); // ✅ un nouveau scope
 
                 var montageWorker = scope.ServiceProvider.GetRequiredService<MontageWorker>();
@@ -30,8 +31,9 @@ namespace YoutubeGenerator.crons
                 await montageWorker.RunAsync(stoppingToken); // appel du worker !
 
                 await youtubeWorker.RunAsync(); // appel du worker !
-                //await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
-                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                await Task.Delay(TimeSpan.FromHours(2), stoppingToken);
+                
+                // await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
 
             }

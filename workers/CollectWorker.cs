@@ -162,7 +162,7 @@ namespace YoutubeGenerator.Workers
                         _logger.LogInformation("🟦 No unique items to import.");
                         return;
                     }
-
+                    _logger.LogInformation($"Unique items count : {uniqueItems.Count}");
                     // Add to download bag
                     downloadBag.AddRange(uniqueItems);
                     JsonFileService.Save(_bagSource, downloadBag);

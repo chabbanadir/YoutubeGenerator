@@ -22,14 +22,15 @@ namespace YoutubeGenerator.crons
 
             while (!stoppingToken.IsCancellationRequested)
             {
+                _logger.LogInformation($"## CRON Download & Trim : Time check = {DateTime.UtcNow}");
                 using var scope = _scopeFactory.CreateScope(); // ✅ un nouveau scope
 
                 var collectWorker = scope.ServiceProvider.GetRequiredService<CollectWorker>();
                
                 await collectWorker.RunAsync(stoppingToken); // appel du worker !
 
-                //await Task.Delay(TimeSpan.FromHours(2), stoppingToken);
-                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
+                // await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
 
 
             }

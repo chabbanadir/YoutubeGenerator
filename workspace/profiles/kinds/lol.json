@@ -1,12 +1,12 @@
 {
   "YoutubeChannelId": "UCp0VZF9zVqabv2QUUXPZNiA",
-  "YoutubeClientId": "996086182152-4kvivfvq2tgbkvh56ldj051jickvuohu.apps.googleusercontent.com",
-  "YoutubeClientSecret": "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",
-  "YoutubeRefreshToken": "1//04uo3ZHLud3ejCgYIARAAGAQSNwF-L9IrcX52kq8bXwpT2ckss6jgv4II9F2JemsPUG1F4Csvy2SN0qC-MxLmFesBvptrs2ts-BQ",
+  "YoutubeClientId": "996086182152-1380cd9fkfcqr0m50va9sess6ojg0c6f.apps.googleusercontent.com",
+  "YoutubeClientSecret": "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",
+  "YoutubeRefreshToken": "1//04QT6eSxdnOupCgYIARAAGAQSNwF-L9IrF4HAz0ZoYCJc7B2uPYWoyKQ0GjWiQiqE2LGUCWGYiuRbfcJr-C5f0ND2Yfq3jzLcaLk",
   "UploadConfig": {
     "MinDelayHours": 8,
-    "LastUploadTime": "2025-12-10T18h:00:00.4144214Z",
-    "UploadCounter": 0,
+    "LastUploadTime": "2025-12-17T16:00:00Z",
+    "UploadCounter": 2,
     "Enabled": false
   }
 }
