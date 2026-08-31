@@ -9,10 +9,24 @@ using YoutubeGenerator.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddHttpClient();
+
 builder.Services.AddSingleton<ILlmService>(sp =>
 {
-    var apiKey = builder.Configuration["Google:ApiKey"];
-    return new LlmService(apiKey);
+    var apiKey = builder.Configuration["OLLAMA_API_KEY"]
+                 ?? builder.Configuration["Ollama:ApiKey"]
+                 ?? builder.Configuration["OpenRouter:ApiKey"] 
+                 ?? builder.Configuration["OPENROUTER_API_KEY"] 
+                 ?? "7bef61ad0a9d45a1bc155e823a5a7b9c.bRK0S7_z44bEP3aPCNU_0a-w";
+
+    var model = builder.Configuration["OLLAMA_MODEL"]
+                ?? builder.Configuration["Ollama:Model"]
+                ?? builder.Configuration["OpenRouter:Model"] 
+                ?? builder.Configuration["OPENROUTER_MODEL"] 
+                ?? "gemma4:31b";
+
+    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient("LlmService");
+    return new LlmService(httpClient, apiKey, model);
 });
 // ----------------------
 // Services
@@ -59,4 +73,5 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 app.Run();

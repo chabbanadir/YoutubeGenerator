@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;
 using YoutubeGenerator.Interfaces;
-using YoutubeGenerator.Models; // Assuming MontageItem and MontageLLMResult are in this namespace
+using YoutubeGenerator.Models;
+using YoutubeGenerator.Workers;
 
 namespace YoutubeGenerator.Controllers
 {
@@ -9,22 +11,38 @@ namespace YoutubeGenerator.Controllers
     [Route("api/admin")]
     public class TestController : ControllerBase
     {
-        // Inject the services via the constructor
         private readonly ILlmService _llmService;
         private readonly IMontageProfileService _montageProfileService;
+        private readonly IServiceScopeFactory _scopeFactory;
 
-        public TestController(ILlmService llmService, IMontageProfileService montageProfileService)
+        public TestController(ILlmService llmService, IMontageProfileService montageProfileService, IServiceScopeFactory scopeFactory)
         {
             _llmService = llmService;
             _montageProfileService = montageProfileService;
+            _scopeFactory = scopeFactory;
+        }
+
+        /// <summary>
+        /// Manually triggers the CollectWorker pipeline (downloads CSV, clips, trims, packages montage).
+        /// Route: POST /api/admin/trigger-collect
+        /// </summary>
+        [HttpPost("trigger-collect")]
+        public async Task<IActionResult> TriggerCollect()
+        {
+            _ = Task.Run(async () =>
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var collectWorker = scope.ServiceProvider.GetRequiredService<CollectWorker>();
+                await collectWorker.RunAsync(System.Threading.CancellationToken.None);
+            });
+
+            return Ok(new { message = "CollectWorker triggered successfully in background." });
         }
 
         /// <summary>
         /// Tests the LLM metadata generation with a provided MontageItem package.
         /// Route: POST /api/admin/test-llm-generation
         /// </summary>
-        /// <param name="package">The MontageItem data to generate metadata for.</param>
-        /// <returns>The generated MontageLLMResult (Title and Description).</returns>
         [HttpPost("test-llm-generation")]
         [ProducesResponseType(typeof(MontageLLMResult), 200)]
         [ProducesResponseType(400)]
@@ -35,8 +53,6 @@ namespace YoutubeGenerator.Controllers
                 return BadRequest("MontageItem package data is required.");
             }
 
-            // 1. Get the Profile based on the package keys, as specified in your setup
-            // Note: Error handling for null profile might be needed here in a real app
             var profile = _montageProfileService.GetProfile(package.KindKey, package.SubKindKey);
 
             if (profile == null)
@@ -44,7 +60,6 @@ namespace YoutubeGenerator.Controllers
                 return BadRequest($"Montage Profile not found for KindKey: {package.KindKey}, SubKindKey: {package.SubKindKey}");
             }
 
-            // 2. Generate the Title and Description using the LlmService
             MontageLLMResult result;
             try
             {
@@ -52,11 +67,9 @@ namespace YoutubeGenerator.Controllers
             }
             catch (System.Exception ex)
             {
-                // Catch any exceptions (e.g., API key errors, LLM response parsing failure)
                 return StatusCode(500, $"LLM generation failed: {ex.Message}");
             }
 
-            // 3. Return the generated result
             return Ok(result);
         }
     }

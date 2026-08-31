@@ -1,6 +1,3 @@
-﻿using GenerativeAI;
-using GenerativeAI.Types;
-using GenerativeAI.Exceptions;
 using System.Text;
 using System.Text.Json;
 using YoutubeGenerator.Interfaces;
@@ -10,31 +7,29 @@ namespace YoutubeGenerator.Services
 {
     public class LlmService : ILlmService
     {
-        private readonly GenerativeModel _model;
+        private readonly HttpClient _httpClient;
+        private readonly string _apiKey;
+        private readonly string _primaryModel;
         private readonly SemaphoreSlim _rateLimiter;
+
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         };
 
-        public LlmService(string apiKey)
+        private const string OllamaApiUrl = "https://ollama.com/api/chat";
+        private const string OpenRouterApiUrl = "https://openrouter.ai/api/v1/chat/completions";
+
+        public LlmService(string apiKey, string model = "gemma4:31b")
+            : this(new HttpClient(), apiKey, model)
         {
-            var key = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
-            var googleAI = new GoogleAi(key);
+        }
 
-            // Use stable, free model: gemini-1.5-flash (15 RPM free tier)
-            _model = googleAI.CreateGenerativeModel("models/gemini-2.0-flash");
-
-            _model.Config = new GenerationConfig
-            {
-                Temperature = 0.8,
-                TopP = 0.95,
-                TopK = 40,
-                MaxOutputTokens = 2048,
-                ResponseMimeType = "application/json"
-            };
-
-            // Rate limiter: Max 15 requests per minute (free tier)
+        public LlmService(HttpClient httpClient, string apiKey, string model = "gemma4:31b")
+        {
+            _httpClient = httpClient ?? new HttpClient();
+            _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+            _primaryModel = string.IsNullOrWhiteSpace(model) ? "gemma4:31b" : model;
             _rateLimiter = new SemaphoreSlim(1, 1);
         }
 
@@ -42,7 +37,6 @@ namespace YoutubeGenerator.Services
         {
             var result = new MontageLLMResult();
 
-            // Safety check
             if (package.Clips == null || !package.Clips.Any())
             {
                 result.Title = $"{profile.KindKey} Highlights";
@@ -50,30 +44,15 @@ namespace YoutubeGenerator.Services
                 return result;
             }
 
+            var lockAcquired = false;
             try
             {
-                // Rate limiting: Wait 4 seconds between requests (15 RPM = 1 per 4 sec)
-                await _rateLimiter.WaitAsync();
-                await Task.Delay(4000); // Ensure we don't hit rate limits
+                lockAcquired = await _rateLimiter.WaitAsync(TimeSpan.FromSeconds(10));
 
                 var prompt = BuildComprehensivePrompt(package, profile);
 
-                var request = new GenerateContentRequest();
-                request.AddText(prompt);
-
-                var response = await ExecuteWithRetryAsync(action: async () =>
-                {
-                    return await _model.GenerateContentAsync(request);
-                });
-
-                // Parse JSON response
-                var jsonText = response.Text?.Trim() ?? "{}";
-
-                // Remove markdown code blocks if present
-                if (jsonText.StartsWith("```json"))
-                {
-                    jsonText = jsonText.Replace("```json", "").Replace("```", "").Trim();
-                }
+                var rawResponse = await ExecuteLlmRequestWithFallbackAsync(prompt);
+                var jsonText = ExtractJson(rawResponse);
 
                 var metadata = JsonSerializer.Deserialize<MetadataResponse>(jsonText, _jsonOptions);
 
@@ -90,16 +69,166 @@ namespace YoutubeGenerator.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[LlmService] Error: {ex.Message}");
+                Console.WriteLine($"[LlmService] Error generating metadata via LLM: {ex.Message}");
                 result.Title = $"{profile.KindKey} Montage - {DateTime.Now:MMM dd}";
                 result.Description = BuildFallbackDescription(package, profile);
             }
             finally
             {
-                _rateLimiter.Release();
+                if (lockAcquired)
+                {
+                    _rateLimiter.Release();
+                }
             }
 
             return result;
+        }
+
+        private async Task<string> ExecuteLlmRequestWithFallbackAsync(string prompt)
+        {
+            var modelsToTry = new List<string>
+            {
+                _primaryModel,
+                "gemma4:31b",
+                "gpt-oss:20b",
+                "deepseek-v4-flash:0731",
+                "glm-5.3-flash",
+                "nemotron-3-nano:30b"
+            }.Distinct().ToList();
+
+            // 1️⃣ Try Ollama Cloud API first
+            foreach (var model in modelsToTry)
+            {
+                try
+                {
+                    Console.WriteLine($"[LlmService] Requesting Ollama Cloud with model '{model}'...");
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+                    using var requestMessage = new HttpRequestMessage(HttpMethod.Post, OllamaApiUrl);
+
+                    requestMessage.Headers.Add("Authorization", $"Bearer {_apiKey}");
+
+                    var requestPayload = new
+                    {
+                        model = model,
+                        messages = new[]
+                        {
+                            new { role = "system", content = "You are a YouTube SEO expert specializing in gaming content. Always return valid raw JSON." },
+                            new { role = "user", content = prompt }
+                        },
+                        stream = false
+                    };
+
+                    var jsonContent = JsonSerializer.Serialize(requestPayload);
+                    requestMessage.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                    var response = await _httpClient.SendAsync(requestMessage, cts.Token);
+                    var responseBody = await response.Content.ReadAsStringAsync(cts.Token);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine($"[LlmService] Ollama model '{model}' status {response.StatusCode}: {responseBody}");
+                        continue;
+                    }
+
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("message", out var msgObj) && msgObj.TryGetProperty("content", out var contentElem))
+                    {
+                        var text = contentElem.GetString();
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            Console.WriteLine($"[LlmService] Successfully generated metadata with Ollama Cloud model '{model}'");
+                            return text;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[LlmService] Ollama model '{model}' attempt failed: {ex.Message}");
+                }
+            }
+
+            // 2️⃣ Fallback to OpenRouter API if needed
+            foreach (var model in new[] { "nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free" })
+            {
+                try
+                {
+                    Console.WriteLine($"[LlmService] Requesting OpenRouter fallback with model '{model}'...");
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    using var requestMessage = new HttpRequestMessage(HttpMethod.Post, OpenRouterApiUrl);
+
+                    requestMessage.Headers.Add("Authorization", $"Bearer {_apiKey}");
+                    requestMessage.Headers.Add("HTTP-Referer", "https://github.com/chabbanadir/YoutubeGenerator");
+                    requestMessage.Headers.Add("X-Title", "YoutubeGenerator");
+
+                    var requestPayload = new
+                    {
+                        model = model,
+                        messages = new[]
+                        {
+                            new { role = "system", content = "You are a YouTube SEO expert specializing in gaming content. Always return valid raw JSON." },
+                            new { role = "user", content = prompt }
+                        },
+                        temperature = 0.7
+                    };
+
+                    var jsonContent = JsonSerializer.Serialize(requestPayload);
+                    requestMessage.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+                    var response = await _httpClient.SendAsync(requestMessage, cts.Token);
+                    var responseBody = await response.Content.ReadAsStringAsync(cts.Token);
+
+                    if (!response.IsSuccessStatusCode)
+                        continue;
+
+                    using var doc = JsonDocument.Parse(responseBody);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
+                    {
+                        var firstChoice = choices[0];
+                        if (firstChoice.TryGetProperty("message", out var message) &&
+                            message.TryGetProperty("content", out var content))
+                        {
+                            var text = content.GetString();
+                            if (!string.IsNullOrWhiteSpace(text))
+                            {
+                                Console.WriteLine($"[LlmService] Successfully generated metadata with OpenRouter model '{model}'");
+                                return text;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore fallback exceptions
+                }
+            }
+
+            throw new Exception("All LLM candidate models failed.");
+        }
+
+        private static string ExtractJson(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return text;
+
+            if (text.Contains("```"))
+            {
+                text = System.Text.RegularExpressions.Regex.Replace(
+                    text, @"^```(?:json)?\s*|\s*```$", "",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            }
+
+            int firstBrace = text.IndexOf('{');
+            int lastBrace = text.LastIndexOf('}');
+
+            if (firstBrace >= 0 && lastBrace > firstBrace)
+            {
+                return text.Substring(firstBrace, lastBrace - firstBrace + 1);
+            }
+
+            return text.Trim();
         }
 
         private string BuildComprehensivePrompt(MontageItem package, MontageProfile profile)
@@ -155,13 +284,11 @@ namespace YoutubeGenerator.Services
             sb.AppendLine("- Include relevant keywords naturally");
             sb.AppendLine("- End with a call-to-action (subscribe/like)");
             sb.AppendLine("- DO NOT include social media links or timestamps (I'll add them)");
-            sb.AppendLine("- Use \\n for line breaks (properly escaped for JSON)");
-            sb.AppendLine("- Ensure all special characters are JSON-escaped"); 
             sb.AppendLine("- Keep it engaging and professional");
             sb.AppendLine();
 
             sb.AppendLine("## OUTPUT FORMAT:");
-            sb.AppendLine("Return ONLY valid JSON (no markdown, no code blocks):");
+            sb.AppendLine("Return ONLY valid JSON (no markdown, no extra commentary):");
             sb.AppendLine("{");
             sb.AppendLine("  \"title\": \"Your catchy title here\",");
             sb.AppendLine("  \"description\": \"Your engaging description here\"");
@@ -174,24 +301,22 @@ namespace YoutubeGenerator.Services
         {
             var sb = new StringBuilder();
 
-            // AI-generated description
             if (!string.IsNullOrWhiteSpace(aiDescription))
             {
                 sb.AppendLine(aiDescription.Trim());
                 sb.AppendLine();
             }
 
-            // Timestamps section
             sb.AppendLine("⏱️ TIMESTAMPS:");
             TimeSpan cumulativeTime = TimeSpan.Zero;
             var timestampCount = 0;
 
-            foreach (var clip in package.Clips.Take(20)) // Limit to 20 timestamps
+            foreach (var clip in package.Clips.Take(20))
             {
                 if (clip != null && !string.IsNullOrWhiteSpace(clip.Description))
                 {
                     sb.AppendLine($"{cumulativeTime:mm\\:ss} - {clip.Description}");
-                    cumulativeTime += clip.Duration; // TimeSpan += TimeSpan
+                    cumulativeTime += clip.Duration;
                     timestampCount++;
                 }
             }
@@ -202,7 +327,6 @@ namespace YoutubeGenerator.Services
             }
             sb.AppendLine();
 
-            // Streamer credits
             var uniqueStreamers = package.Clips
                 .Select(c => c.Description)
                 .Where(d => !string.IsNullOrWhiteSpace(d))
@@ -220,7 +344,6 @@ namespace YoutubeGenerator.Services
                 sb.AppendLine();
             }
 
-            // Social media (from profile)
             var hasSocial = !string.IsNullOrEmpty(profile.FacebookLink) ||
                            !string.IsNullOrEmpty(profile.InstagramLink) ||
                            !string.IsNullOrEmpty(profile.TiktokLink);
@@ -237,7 +360,6 @@ namespace YoutubeGenerator.Services
                 sb.AppendLine();
             }
 
-            // Tags
             var kindKeyClean = profile.KindKey.Replace(" ", "");
             sb.AppendLine($"#Gaming #{kindKeyClean} #Highlights #EpicMoments #Twitch #Compilation");
 
@@ -252,7 +374,6 @@ namespace YoutubeGenerator.Services
             sb.AppendLine("This video showcases incredible plays, funny moments, and epic highlights.");
             sb.AppendLine();
 
-            // Add streamers
             var streamers = package.Clips
                 .Select(c => c.Description)
                 .Where(d => !string.IsNullOrWhiteSpace(d))
@@ -280,54 +401,14 @@ namespace YoutubeGenerator.Services
             if (string.IsNullOrWhiteSpace(title))
                 return $"Gaming Highlights - {DateTime.Now:MMM dd}";
 
-            // Remove quotes if present
             title = title.Trim().Trim('"', '\'', ' ');
 
-            // Ensure it's not too long (YouTube limit is 100 chars)
             if (title.Length > 95)
             {
                 title = title.Substring(0, 92) + "...";
             }
 
             return title;
-        }
-
-        private async Task<GenerateContentResponse> ExecuteWithRetryAsync(
-            Func<Task<GenerateContentResponse>> action,
-            int maxRetries = 3)
-        {
-            Exception lastException = null;
-
-            for (int i = 0; i < maxRetries; i++)
-            {
-                try
-                {
-                    var response = await action();
-                    return response;
-                }
-                catch (ApiException ex) when (
-                    ex.Message.Contains("503") ||
-                    ex.Message.Contains("overloaded") ||
-                    ex.Message.Contains("429") ||
-                    ex.Message.Contains("quota"))
-                {
-                    lastException = ex;
-                    if (i == maxRetries - 1) throw;
-
-                    var delayMs = (int)(Math.Pow(2, i + 2) * 1000); // 4000ms, 8000ms, 16000ms
-                    Console.WriteLine($"[LlmService] Rate limited. Retrying in {delayMs / 1000}s... (Attempt {i + 1}/{maxRetries})");
-                    await Task.Delay(delayMs);
-                }
-                catch (Exception ex)
-                {
-                    lastException = ex;
-                    Console.WriteLine($"[LlmService] Attempt {i + 1}/{maxRetries} failed: {ex.Message}");
-                    if (i == maxRetries - 1) throw;
-                    await Task.Delay(2000);
-                }
-            }
-
-            throw new Exception($"LLM connection failed after {maxRetries} retries.", lastException);
         }
     }
 

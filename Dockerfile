@@ -6,15 +6,18 @@ COPY *.csproj ./
 RUN dotnet restore
 
 COPY . .
-RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish YoutubeGenerator.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 # ---------------- RUNTIME -----------------
 FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0-preview AS runtime
 WORKDIR /app
 
+# Install ffmpeg, python3, curl, wget, ca-certificates, and the latest release of yt-dlp directly from GitHub
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg yt-dlp ca-certificates && \
-      rm -rf /var/lib/apt/lists/*
+      ffmpeg python3 ca-certificates wget curl && \
+      rm -rf /var/lib/apt/lists/* && \
+      curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
+      chmod a+rx /usr/local/bin/yt-dlp
 
 # create workspace directories
 RUN mkdir -p /app/workspace/bags \

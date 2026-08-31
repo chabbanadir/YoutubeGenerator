@@ -1,9 +1,10 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 using YoutubeGenerator.Interfaces;
 using YoutubeGenerator.Models;
 using YoutubeGenerator.Services;
+using YoutubeGenerator.workers;
 
 namespace YoutubeGenerator.Workers
 {
@@ -29,6 +30,8 @@ namespace YoutubeGenerator.Workers
         private readonly string _bagMontage;
         private readonly string _bagFailed;
         private readonly string _bagHistory;
+        private readonly MontageWorker _montageWorker;
+        private readonly YoutubeWorker _youtubeWorker;
 
         private readonly int n;
 
@@ -43,7 +46,9 @@ namespace YoutubeGenerator.Workers
           IGitHubCsvFetcher githubCsvFetcher,
           ICsvService csvService,
           IMontageProfileService profiels,
-          IPathService pathService)
+          IPathService pathService,
+          MontageWorker montageWorker,
+          YoutubeWorker youtubeWorker)
         {
             _pathService = pathService;
             _download = download;
@@ -54,6 +59,8 @@ namespace YoutubeGenerator.Workers
             _githubCsvFetcher = githubCsvFetcher;
             _csvService = csvService;
             _profiles = profiels;
+            _montageWorker = montageWorker;
+            _youtubeWorker = youtubeWorker;
 
             var cfgValue = cfg.Value;
             n = cfgValue.BatchSize;
@@ -243,6 +250,11 @@ namespace YoutubeGenerator.Workers
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, $"🚨 Failed to trim clip {clip.Link}");
+                        clip.Description += $" [FAILED: Trim_Error]";
+                        failedBag.Add(clip);
+                        downloadBag.RemoveAt(i);
+                        JsonFileService.Save(_bagFailed, failedBag);
+                        JsonFileService.Save(_bagSource, downloadBag);
                     }
                     finally
                     {
@@ -307,6 +319,13 @@ namespace YoutubeGenerator.Workers
                         JsonFileService.Save(_bagTrim, trimBag);
                     }
                 }
+
+                // ============================================================================
+                //  PHASE 3 : AUTOMATICALLY TRIGGER MONTAGE & YOUTUBE WORKERS
+                // ============================================================================
+                _logger.LogInformation("🚀 Download & packaging cycle completed. Automatically triggering MontageWorker & YoutubeWorker...");
+                await _montageWorker.RunAsync(cancellationToken);
+                await _youtubeWorker.RunAsync();
             }
             finally
             {

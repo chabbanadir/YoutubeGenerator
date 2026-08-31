@@ -369,3 +369,4 @@ workspace/bags/
 
 # --- Configuration (Secrets) ---
 #appSettings.json
+.env
