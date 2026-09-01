@@ -27,3 +27,4 @@ jobs:
             docker compose up -d --build --remove-orphans
             docker image prune -f
             echo "✅ YoutubeGenerator deployed successfully on prod!"
+# Trigger deployment test
