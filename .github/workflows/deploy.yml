@@ -20,7 +20,7 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             echo "🚀 Starting Deployment for YoutubeGenerator..."
-            cd /home/${{ secrets.VPS_USER }}/apps/YoutubeGenerator
+            cd /home/${{ secrets.VPS_USER }}/Desktop/Projects/YoutubeGenerator
             git fetch origin
             git checkout prod
             git pull origin prod
