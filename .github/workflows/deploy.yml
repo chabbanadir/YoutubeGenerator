@@ -20,11 +20,10 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             echo "🚀 Starting Deployment for YoutubeGenerator..."
-            cd /home/${{ secrets.VPS_USER }}/Desktop/Projects/YoutubeGenerator
+            cd /home/${{ secrets.VPS_USER }}/YoutubeGenerator
             git fetch origin
             git checkout prod
             git pull origin prod
             docker compose up -d --build --remove-orphans
             docker image prune -f
             echo "✅ YoutubeGenerator deployed successfully on prod!"
-# Trigger deployment test
