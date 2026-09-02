@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using YoutubeGenerator.Interfaces;
@@ -11,6 +12,12 @@ namespace YoutubeGenerator.Services
         private readonly IConfiguration _config;
         private readonly string _kindsDir;
         private readonly string _subkindsDir;
+
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
 
         private static readonly string[] SensitiveKeys = new[]
         {
@@ -55,7 +62,7 @@ namespace YoutubeGenerator.Services
                         {
                             var node = JsonNode.Parse(rawJson);
                             SanitizeNode(node);
-                            var sanitized = node?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "{}";
+                            var sanitized = node?.ToJsonString(JsonOptions) ?? "{}";
                             parsedData = JsonSerializer.Deserialize<object>(sanitized);
                             rawJson = sanitized;
                             isRedacted = true;
@@ -149,7 +156,7 @@ namespace YoutubeGenerator.Services
             string fileName = $"{kindKey.ToLowerInvariant()}_{subKindKey.ToLowerInvariant()}.json";
             string fullPath = Path.Combine(_subkindsDir, fileName);
 
-            string formattedJson = JsonSerializer.Serialize(content, new JsonSerializerOptions { WriteIndented = true });
+            string formattedJson = JsonSerializer.Serialize(content, JsonOptions);
             File.WriteAllText(fullPath, formattedJson);
 
             _logger.LogInformation($"Created subkind profile '{fileName}'.");
@@ -202,7 +209,7 @@ namespace YoutubeGenerator.Services
                 throw new ArgumentException("Invalid JSON payload.");
             }
 
-            string formattedJson = JsonSerializer.Serialize(existingDict, new JsonSerializerOptions { WriteIndented = true });
+            string formattedJson = JsonSerializer.Serialize(existingDict, JsonOptions);
             File.WriteAllText(fullPath, formattedJson);
 
             _logger.LogInformation($"Updated subkind profile '{cleanName}'.");
@@ -291,7 +298,7 @@ namespace YoutubeGenerator.Services
                 dict["UploadConfig"] = new YoutubeGenerator.Models.UploadConfig();
             }
 
-            string formattedJson = JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true });
+            string formattedJson = JsonSerializer.Serialize(dict, JsonOptions);
             File.WriteAllText(fullPath, formattedJson);
 
             _logger.LogInformation($"Created kind profile '{fileName}'.");
@@ -397,7 +404,7 @@ namespace YoutubeGenerator.Services
                 throw new ArgumentException("Invalid JSON payload.");
             }
 
-            string formattedJson = JsonSerializer.Serialize(existingDict, new JsonSerializerOptions { WriteIndented = true });
+            string formattedJson = JsonSerializer.Serialize(existingDict, JsonOptions);
             File.WriteAllText(fullPath, formattedJson);
 
             _logger.LogInformation($"Updated kind profile '{cleanName}'.");
@@ -462,7 +469,7 @@ namespace YoutubeGenerator.Services
             uploadConfig["MinDelayHours"] = minDelayHours;
             resultDict["UploadConfig"] = uploadConfig;
 
-            string updatedJson = JsonSerializer.Serialize(resultDict, new JsonSerializerOptions { WriteIndented = true });
+            string updatedJson = JsonSerializer.Serialize(resultDict, JsonOptions);
             File.WriteAllText(fullPath, updatedJson);
 
             _logger.LogInformation($"Updated min delay to {minDelayHours} hrs for '{cleanName}'.");

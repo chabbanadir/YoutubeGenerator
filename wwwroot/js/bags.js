@@ -31,11 +31,22 @@ async function handleSaveRawJsonInline() {
 
   if (!textarea) return;
 
-  const rawJsonInput = textarea.value;
+  let rawJsonInput = textarea.value.trim();
 
+  // If empty input, default to {} for worker status or [] for item bags
+  if (!rawJsonInput) {
+    if (currentSelectedBag && currentSelectedBag.startsWith('worker_')) {
+      rawJsonInput = '{}';
+    } else {
+      rawJsonInput = '[]';
+    }
+    textarea.value = rawJsonInput;
+  }
+
+  let parsedObject;
   // Client-side JSON Syntax Validation
   try {
-    JSON.parse(rawJsonInput);
+    parsedObject = JSON.parse(rawJsonInput);
   } catch (jsonErr) {
     if (errorMsg) {
       errorMsg.innerText = `Invalid JSON syntax: ${jsonErr.message}`;
@@ -52,7 +63,7 @@ async function handleSaveRawJsonInline() {
     const res = await fetch(`/api/dashboard/bags/${encodeURIComponent(currentSelectedBag)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: rawJsonInput })
+      body: JSON.stringify(parsedObject)
     });
 
     if (!res.ok) {

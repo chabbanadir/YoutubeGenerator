@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace YoutubeGenerator.Services
 {
@@ -24,7 +25,8 @@ namespace YoutubeGenerator.Services
 
             var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
             });
 
             File.WriteAllText(file, json);

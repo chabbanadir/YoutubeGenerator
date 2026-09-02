@@ -261,7 +261,40 @@ namespace YoutubeGenerator.Services
             var cleanName = Path.GetFileName(bagName);
             var fullPath = Path.Combine(_bagsDir, cleanName);
 
-            string formattedJson = JsonSerializer.Serialize(content, new JsonSerializerOptions { WriteIndented = true });
+            JsonElement targetElement = content;
+
+            // Handle legacy or wrapped payloads like { "content": "..." } or { "content": [...] }
+            if (content.ValueKind == JsonValueKind.Object && content.TryGetProperty("content", out var contentProp))
+            {
+                if (contentProp.ValueKind == JsonValueKind.String)
+                {
+                    var strVal = contentProp.GetString() ?? "";
+                    if (!string.IsNullOrWhiteSpace(strVal))
+                    {
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(strVal);
+                            targetElement = doc.RootElement.Clone();
+                        }
+                        catch
+                        {
+                            // Keep original contentProp string if parsing fails
+                        }
+                    }
+                }
+                else if (contentProp.ValueKind == JsonValueKind.Object || contentProp.ValueKind == JsonValueKind.Array)
+                {
+                    targetElement = contentProp;
+                }
+            }
+
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+
+            string formattedJson = JsonSerializer.Serialize(targetElement, options);
             File.WriteAllText(fullPath, formattedJson);
             _logger.LogInformation($"Saved bag file '{cleanName}'.");
         }
