@@ -12,9 +12,18 @@ namespace YoutubeGenerator.Services
 
             var json = File.ReadAllText(file);
 
-            return string.IsNullOrWhiteSpace(json)
-                ? Activator.CreateInstance<T>()
-                : JsonSerializer.Deserialize<T>(json)!;
+            if (string.IsNullOrWhiteSpace(json))
+                return Activator.CreateInstance<T>();
+
+            try
+            {
+                var result = JsonSerializer.Deserialize<T>(json);
+                return result != null ? result : Activator.CreateInstance<T>();
+            }
+            catch
+            {
+                return Activator.CreateInstance<T>();
+            }
         }
 
         public static void Save<T>(string file, T obj)
