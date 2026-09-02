@@ -1,7 +1,7 @@
 {
   "KindKey": "valorant",
   "SubKindKey": "normal",
-  "IntroFile": "ressources/intro_lol.mp4",
+  "IntroFile": "intro_lol.mp4",
   "TransitionAnimation": "fade",
   "TransitionDuration": 2,
   "MinMontageMinutes": 12

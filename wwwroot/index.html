@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Generator - Pipeline Inspector</title>
+  <!-- Google Fonts: Inter & Fira Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <nav class="navbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <i data-lucide="play-square"></i>
+      </div>
+      <div>
+        <div class="brand-title">YoutubeGenerator</div>
+        <span class="brand-badge">Pipeline Inspector</span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <!-- Live Worker Status Pills -->
+      <div class="worker-pills">
+        <div class="pill" title="Collect Worker Status">
+          <span class="status-dot" id="collectDot"></span>
+          <span>Collect: <strong id="collectStatusText">Checking...</strong></span>
+        </div>
+        <div class="pill" title="Montage Worker Status">
+          <span class="status-dot" id="montageDot"></span>
+          <span>Montage: <strong id="montageStatusText">Checking...</strong></span>
+        </div>
+        
+        <!-- Auth Status Pill -->
+        <div class="pill auth-guest" id="authStatusPill" title="Authentication Security Layer">
+          <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+          <span id="authStatusText">Public View (Read-Only)</span>
+        </div>
+      </div>
+
+      <!-- Auth Action Buttons -->
+      <button class="btn btn-primary" id="loginModalBtn" onclick="openLoginModal()" title="Admin Login">
+        <i data-lucide="log-in" style="width: 14px; height: 14px;"></i>
+        <span>Login</span>
+      </button>
+
+      <button class="btn btn-secondary" id="logoutBtn" onclick="handleLogout()" style="display: none;" title="Logout Admin Session">
+        <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
+        <span>Logout</span>
+      </button>
+
+      <!-- Refresh Button -->
+      <button class="btn btn-secondary" id="refreshBtn" onclick="fetchDashboardOverview(true)" title="Refresh Dashboard Data">
+        <i data-lucide="refresh-cw" class="spin-icon" id="refreshIcon"></i>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main App Layout -->
+  <main class="app-container">
+    <div style="width: 100%;">
+      <!-- Navigation Tabs -->
+      <div class="tabs-nav">
+        <button class="tab-btn active" id="tab-btn-overview" onclick="switchTab('overview')">
+          <i data-lucide="layout-dashboard"></i> Pipeline Overview
+        </button>
+        <button class="tab-btn" id="tab-btn-bags" onclick="switchTab('bags')">
+          <i data-lucide="folder-kanban"></i> Bags Content Inspector
+        </button>
+        <button class="tab-btn" id="tab-btn-profiles" onclick="switchTab('profiles')" style="display: none;">
+          <i data-lucide="sliders"></i> Profiles Manager
+        </button>
+      </div>
+
+      <!-- TAB 1: PIPELINE OVERVIEW -->
+      <div id="tab-overview" class="tab-view active">
+        <!-- Interactive Visual Pipeline -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <i data-lucide="git-merge" style="color: var(--primary);"></i> Automation Pipeline Flow
+            </div>
+            <span class="text-muted" style="font-size: 0.8rem;">Click step to inspect bag items</span>
+          </div>
+          <div class="pipeline-flow">
+            <div class="pipeline-step" onclick="openBagInExplorer('bag_download.json')">
+              <div class="pipeline-icon" style="color: var(--accent-cyan);">📥</div>
+              <div class="pipeline-name">Download Queue</div>
+              <div class="pipeline-val" id="pipe-download-count">0</div>
+            </div>
+            <div class="pipeline-step" onclick="openBagInExplorer('bag_trimmed.json')">
+              <div class="pipeline-icon" style="color: var(--primary);">✂️</div>
+              <div class="pipeline-name">Trimmed Clips</div>
+              <div class="pipeline-val" id="pipe-trimmed-count">0</div>
+            </div>
+            <div class="pipeline-step" onclick="openBagInExplorer('bag_montage.json')">
+              <div class="pipeline-icon" style="color: var(--accent-amber);">🎬</div>
+              <div class="pipeline-name">Montage Packages</div>
+              <div class="pipeline-val" id="pipe-montage-count">0</div>
+            </div>
+            <div class="pipeline-step" onclick="openBagInExplorer('bag_youtube.json')">
+              <div class="pipeline-icon" style="color: #a855f7;">🚀</div>
+              <div class="pipeline-name">Ready for Upload</div>
+              <div class="pipeline-val" id="pipe-youtube-count">0</div>
+            </div>
+            <div class="pipeline-step" onclick="openBagInExplorer('bag_youtube_done.json')">
+              <div class="pipeline-icon" style="color: var(--accent-emerald);">✅</div>
+              <div class="pipeline-name">Published</div>
+              <div class="pipeline-val" id="pipe-done-count">0</div>
+            </div>
+            <div class="pipeline-step" onclick="openBagInExplorer('bag_failed.json')">
+              <div class="pipeline-icon" style="color: var(--accent-rose);">⚠️</div>
+              <div class="pipeline-name">Failed Items</div>
+              <div class="pipeline-val" id="pipe-failed-count">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bags Summary Cards Grid -->
+        <div class="card-header" style="margin-top: 0.5rem; margin-bottom: 0;">
+          <h3 class="card-title">
+            <i data-lucide="database" style="color: var(--accent-cyan);"></i> System Data Bags
+          </h3>
+        </div>
+        <div class="dashboard-grid" id="bagsOverviewGrid">
+          <!-- Dynamic Bags Cards will be populated here -->
+        </div>
+      </div>
+
+      <!-- TAB 2: BAGS CONTENT INSPECTOR -->
+      <div id="tab-bags" class="tab-view">
+        <div class="explorer-layout">
+          <!-- Left Bags List Sidebar -->
+          <div class="card" style="padding: 1rem;">
+            <div class="card-title" style="margin-bottom: 1rem; font-size: 0.95rem;">
+              <i data-lucide="files"></i> Available Bags
+            </div>
+            <div class="bag-list" id="bagsSidebarList">
+              <!-- Dynamic List of Bags -->
+            </div>
+          </div>
+
+          <!-- Main Content Inspector -->
+          <div class="card" style="gap: 1rem;">
+            <!-- Inspector Toolbar -->
+            <div class="editor-toolbar">
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <h3 class="card-title" id="selectedBagTitle">
+                  <i data-lucide="file-json" style="color: var(--accent-amber);"></i> bag_download.json
+                </h3>
+                <span class="card-count" id="selectedBagItemCount">0 items</span>
+                <span class="badge badge-inactive" id="redactedBadge" style="display: none; background: rgba(244, 63, 94, 0.15); border-color: rgba(244, 63, 94, 0.4); color: #fda4af;">
+                  <i data-lucide="shield-alert" style="width: 12px; height: 12px; display: inline;"></i> Redacted
+                </span>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <!-- Edit Bag Button (Admin Only) -->
+                <button class="btn btn-primary" id="btnEditBag" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; display: none;" onclick="openEditBagModal()" title="Edit and Save Bag Content">
+                  <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i> Edit Bag
+                </button>
+
+                <!-- Copy JSON Button -->
+                <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="copyToClipboard(currentRawJson, 'Bag JSON')" title="Copy Entire Bag JSON">
+                  <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy JSON
+                </button>
+
+                <!-- Filter Search -->
+                <div style="position: relative;">
+                  <input type="text" id="bagSearchInput" placeholder="Search items..." oninput="renderBagContent()" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: white; padding: 0.4rem 0.8rem 0.4rem 2rem; border-radius: 6px; font-size: 0.85rem; outline: none; width: 190px;">
+                  <i data-lucide="search" style="position: absolute; left: 8px; top: 7px; width: 14px; height: 14px; color: var(--text-muted);"></i>
+                </div>
+
+                <!-- View Mode Toggle -->
+                <div class="editor-mode-toggle">
+                  <button class="mode-btn active" id="btnModeCards" onclick="setBagViewMode('cards')">
+                    <i data-lucide="grid" style="width: 14px; height: 14px; display: inline;"></i> Visual Cards
+                  </button>
+                  <button class="mode-btn" id="btnModeJson" onclick="setBagViewMode('json')">
+                    <i data-lucide="code" style="width: 14px; height: 14px; display: inline;"></i> Raw JSON
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Top Visual Summary Banner -->
+            <div id="inspectorSummaryBanner" class="inspector-summary-banner" style="display: none;">
+              <!-- Dynamic Stat Pills -->
+            </div>
+
+            <!-- Cards Container -->
+            <div id="cardsViewContainer" class="items-cards-grid">
+              <!-- Rendered Item Cards -->
+            </div>
+
+            <!-- Raw JSON Viewer & Direct Inline Editor Container -->
+            <div id="jsonViewContainer" style="display: none; height: 100%; flex-direction: column; gap: 0.75rem;">
+              <div id="jsonEditorHeader" style="display: flex; align-items: center; justify-content: space-between; background: rgba(15, 23, 42, 0.7); padding: 0.6rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;" id="jsonEditorStatus">
+                  <i data-lucide="eye" style="color: var(--text-muted); width: 15px; height: 15px;"></i>
+                  <span style="font-size: 0.85rem; color: var(--text-muted);">Raw JSON View (Read-Only)</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;" id="jsonAdminActions">
+                  <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="formatRawJson()" title="Prettify JSON formatting">
+                    <i data-lucide="sparkles" style="width: 13px; height: 13px;"></i> Format
+                  </button>
+                  <button class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="resetRawJson()" title="Revert to original file content">
+                    <i data-lucide="rotate-ccw" style="width: 13px; height: 13px;"></i> Reset
+                  </button>
+                  <button class="btn btn-primary" id="btnSaveRawJson" onclick="handleSaveRawJsonInline()" style="padding: 0.35rem 0.85rem; font-size: 0.8rem; display: none; background: #10b981; border-color: #10b981;" title="Save changes directly to server">
+                    <i data-lucide="save" style="width: 14px; height: 14px;"></i> Save Changes
+                  </button>
+                </div>
+              </div>
+              <textarea id="bagJsonTextarea" class="json-textarea" spellcheck="false" placeholder="JSON Content..."></textarea>
+              <div id="jsonInlineErrorMsg" style="display: none; color: #f43f5e; font-size: 0.85rem; padding: 0.5rem 0.75rem; background: rgba(244, 63, 94, 0.1); border-radius: 6px; border: 1px solid rgba(244, 63, 94, 0.2);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: PROFILES CONFIGURATION MANAGER -->
+      <div id="tab-profiles" class="tab-view">
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+          
+          <!-- Top Section: Game Kinds (Channel & Upload Configs) -->
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between;">
+              <div>
+                <div class="card-title">
+                  <i data-lucide="youtube" style="color: #ef4444;"></i> Game Kinds (Channels & Authentication)
+                </div>
+                <span class="text-muted" style="font-size: 0.8rem;">Channel IDs, upload schedules, and OAuth authentication tokens</span>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button class="btn btn-primary" id="btnNewKind" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600;" onclick="openCreateKindModal()">
+                  <i data-lucide="plus-circle" style="width: 14px; height: 14px;"></i> Add Kind Profile
+                </button>
+                <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="fetchProfilesData()" title="Reload profiles from disk">
+                  <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Refresh Profiles
+                </button>
+              </div>
+            </div>
+            
+            <div id="kindsGrid" class="profiles-grid">
+              <!-- Rendered Kinds Cards -->
+            </div>
+          </div>
+
+          <!-- Bottom Section: SubKinds Profiles (Assembly Parameters) -->
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between;">
+              <div>
+                <div class="card-title">
+                  <i data-lucide="sliders" style="color: var(--primary);"></i> SubKinds Assembly Profiles
+                </div>
+                <span class="text-muted" style="font-size: 0.8rem;">Profiles for video montage rendering rules & transition parameters</span>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button class="btn btn-primary" id="btnNewSubkind" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600; display: none;" onclick="openCreateSubkindModal()">
+                  <i data-lucide="plus-circle" style="width: 14px; height: 14px;"></i> Add SubKind Profile
+                </button>
+              </div>
+            </div>
+
+            <div id="subkindsGrid" class="profiles-grid">
+              <!-- Rendered SubKinds Cards -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Login Modal -->
+  <div class="modal-backdrop" id="loginModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">
+          <i data-lucide="lock" style="color: var(--accent-indigo);"></i> Admin Authentication
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeLoginModal()" aria-label="Close">
+          <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" class="form-input" id="loginUsername" required autocomplete="username" placeholder="Enter admin username">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-input" id="loginPassword" required autocomplete="current-password" placeholder="Enter password">
+          </div>
+          <div id="loginErrorMsg" style="display: none; color: #f43f5e; font-size: 0.85rem; padding: 0.5rem; background: rgba(244, 63, 94, 0.1); border-radius: 6px; border: 1px solid rgba(244, 63, 94, 0.2);"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="loginSubmitBtn">Login</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Kind Modal -->
+  <div class="modal-backdrop" id="createKindModal">
+    <div class="modal-card" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="createKindModalTitle">
+          <i data-lucide="plus-circle" style="color: var(--primary);"></i> Create New Game Kind Profile
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeCreateKindModal()" aria-label="Close">
+          <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+      <form id="createKindForm" onsubmit="handleCreateKind(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Kind Key / Game Identifier <span style="color:#ef4444;">*</span></label>
+            <input type="text" class="form-input" id="newKindKey" required placeholder="e.g. fortnite, apex, gta5, CS2">
+            <small style="color: var(--text-muted); font-size: 0.75rem;">Will create <code>workspace/profiles/kinds/&lt;kindkey&gt;.json</code></small>
+          </div>
+
+          <div style="border-top: 1px solid var(--border); margin: 1rem 0; padding-top: 0.8rem;">
+            <label class="form-label" style="font-weight: 600; color: #ef4444; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem;">
+              <i data-lucide="youtube" style="width: 16px; height: 16px;"></i> YouTube Integration & OAuth Connector
+            </label>
+            
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+              <label class="form-label">YouTube Channel ID (Optional)</label>
+              <input type="text" class="form-input" id="newKindChannelId" placeholder="e.g. UCuSLLufPm0w1LCgqjgWAZTw">
+            </div>
+
+            <div style="background: rgba(239, 68, 68, 0.08); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.2); display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
+              <div style="flex: 1;">
+                <div style="font-size: 0.82rem; font-weight: 600; color: #f8fafc; display: flex; align-items: center; gap: 0.35rem;">
+                  <i data-lucide="link" style="width: 13px; height: 13px; color: #ef4444;"></i> Instant OAuth Link
+                </div>
+                <div style="font-size: 0.74rem; color: #94a3b8; margin-top: 2px;">
+                  Authorize YouTube channel credentials via Google OAuth directly upon creation.
+                </div>
+              </div>
+              <button type="button" class="btn" id="createAndConnectBtn" onclick="handleCreateAndConnectKind(event)" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);">
+                <i data-lucide="youtube" style="width: 14px; height: 14px;"></i> Create & Connect
+              </button>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid var(--border); margin: 1rem 0; padding-top: 0.8rem;">
+            <label class="form-label" style="font-weight: 600; color: #a78bfa; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem;">
+              <i data-lucide="clock" style="width: 16px; height: 16px;"></i> Upload Automation Rules
+            </label>
+
+            <div class="form-group">
+              <label class="form-label">Min Delay (Hours)</label>
+              <input type="number" class="form-input" id="newKindMinDelayHours" value="8" min="1">
+            </div>
+          </div>
+
+          <div id="createKindErrorMsg" style="display: none; color: #f43f5e; font-size: 0.85rem; padding: 0.5rem; background: rgba(244, 63, 94, 0.1); border-radius: 6px; border: 1px solid rgba(244, 63, 94, 0.2);"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeCreateKindModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="createKindSubmitBtn">Create Only</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create SubKind Modal -->
+  <div class="modal-backdrop" id="createSubkindModal">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="createSubkindModalTitle">
+          <i data-lucide="plus-circle" style="color: var(--primary);"></i> Create New SubKind Profile
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeCreateSubkindModal()" aria-label="Close">
+          <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+      <form id="createSubkindForm" onsubmit="handleCreateSubkind(event)">
+        <div class="modal-body">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Game / Kind Key <span style="color:#ef4444;">*</span></label>
+              <select class="form-input" id="newSubkindKindKey" required style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
+                <option value="" style="background-color: #1e293b; color: #94a3b8;">Select a Game Kind...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">SubKind Key <span style="color:#ef4444;">*</span></label>
+              <input type="text" class="form-input" id="newSubkindSubKindKey" required placeholder="e.g. pentas, aces, normal">
+            </div>
+          </div>
+          <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: -0.2rem; margin-bottom: 0.8rem;">
+            Will create <code>workspace/profiles/subkinds/&lt;kind&gt;_&lt;subkind&gt;.json</code>
+          </small>
+
+          <div class="form-group">
+            <label class="form-label">Intro Video Asset File Path</label>
+            <select class="form-input" id="newSubkindIntroFile" style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
+              <option value="" style="background-color: #1e293b; color: #94a3b8;">None / Select Intro Video...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">FFmpeg Transition Effect</label>
+            <select class="form-input" id="newSubkindTransitionAnimation" style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
+              <option value="fade" style="background-color: #1e293b; color: #f8fafc;">Fade</option>
+              <option value="dissolve" style="background-color: #1e293b; color: #f8fafc;">Dissolve</option>
+              <option value="pixelize" style="background-color: #1e293b; color: #f8fafc;">Pixelize</option>
+              <option value="fadeblack" style="background-color: #1e293b; color: #f8fafc;">Fade Black</option>
+              <option value="fadewhite" style="background-color: #1e293b; color: #f8fafc;">Fade White</option>
+              <option value="wipeleft" style="background-color: #1e293b; color: #f8fafc;">Wipe Left</option>
+              <option value="wiperight" style="background-color: #1e293b; color: #f8fafc;">Wipe Right</option>
+              <option value="wipeup" style="background-color: #1e293b; color: #f8fafc;">Wipe Up</option>
+              <option value="wipedown" style="background-color: #1e293b; color: #f8fafc;">Wipe Down</option>
+              <option value="slideleft" style="background-color: #1e293b; color: #f8fafc;">Slide Left</option>
+              <option value="slideright" style="background-color: #1e293b; color: #f8fafc;">Slide Right</option>
+              <option value="slideup" style="background-color: #1e293b; color: #f8fafc;">Slide Up</option>
+              <option value="slidedown" style="background-color: #1e293b; color: #f8fafc;">Slide Down</option>
+              <option value="circlecrop" style="background-color: #1e293b; color: #f8fafc;">Circle Crop</option>
+              <option value="rectcrop" style="background-color: #1e293b; color: #f8fafc;">Rect Crop</option>
+              <option value="distance" style="background-color: #1e293b; color: #f8fafc;">Distance</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label class="form-label">Transition Duration (Sec)</label>
+              <input type="number" class="form-input" id="newSubkindTransitionDuration" value="2" min="1" max="10">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Min Target Montage (Min)</label>
+              <input type="number" class="form-input" id="newSubkindMinMontageMinutes" value="10" min="1">
+            </div>
+          </div>
+
+          <div id="createSubkindErrorMsg" style="display: none; color: #f43f5e; font-size: 0.85rem; padding: 0.5rem; background: rgba(244, 63, 94, 0.1); border-radius: 6px; border: 1px solid rgba(244, 63, 94, 0.2);"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeCreateSubkindModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="createSubkindSubmitBtn">Create SubKind Profile</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Confirm Delete Profile Modal -->
+  <div class="modal-backdrop" id="confirmDeleteModal">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05);">
+        <h3 class="modal-title" style="color: #f87171; font-size: 1.05rem;">
+          <i data-lucide="alert-triangle" style="color: #ef4444; width: 18px; height: 18px;"></i> Delete Profile
+        </h3>
+        <button type="button" class="modal-close-btn" onclick="closeConfirmDeleteModal()" aria-label="Close">
+          <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="padding: 1.25rem 1.5rem; text-align: center;">
+        <p style="font-size: 0.95rem; color: #e2e8f0; margin-bottom: 0.5rem;">
+          Are you sure you want to delete profile <strong id="deleteProfileFileNameDisplay" style="color: #ef4444; font-family: monospace;"></strong>?
+        </p>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0;">
+          This action will permanently delete the JSON configuration file from disk and cannot be undone.
+        </p>
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="closeConfirmDeleteModal()">Cancel</button>
+        <button type="button" class="btn" id="confirmDeleteSubmitBtn" onclick="executeProfileDelete()" style="background: #dc2626; color: white; border: none; padding: 0.4rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem;">
+          <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete Profile
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Dashboard JavaScript Modules -->
+  <script src="js/api.js?v=3"></script>
+  <script src="js/auth.js?v=3"></script>
+  <script src="js/bags.js?v=3"></script>
+  <script src="js/gameKinds.js?v=3"></script>
+  <script src="js/subKinds.js?v=3"></script>
+  <script src="js/profiles.js?v=3"></script>
+  <script src="js/dashboard.js?v=3"></script>
+</body>
+</html>

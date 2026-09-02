@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using YoutubeGenerator.crons;
 using YoutubeGenerator.Interfaces;
@@ -37,8 +38,11 @@ builder.Services.AddScoped<ITrimService, TrimService>();
 builder.Services.AddScoped<ITransitionService, TransitionService>();
 builder.Services.AddScoped<IPathService, PathService>();
 builder.Services.AddScoped<IMontageProfileService, MontageProfileService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IProfileManagementService, ProfileManagementService>();
 //builder.Services.AddScoped<VideoPipeline>();
 builder.Services.AddScoped<IYoutubeUploader, YoutubeUploader>();
+builder.Services.AddScoped<IYoutubeAuthService, YoutubeAuthService>();
 builder.Services.AddScoped<IGitHubCsvFetcher, GitHubCsvFetcher>();
 builder.Services.Configure<CollectWorkerConfig>(
     builder.Configuration.GetSection("CollectWorker")
@@ -53,6 +57,26 @@ builder.Services.AddScoped<YoutubeWorker>();
 builder.Services.AddHostedService<CronCollectService>();
 builder.Services.AddHostedService<CronMontageUploadService>();
 
+// Authentication & Authorization
+builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "YoutubeGenerator.Auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+builder.Services.AddAuthorization();
+
 // API
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -60,6 +84,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Enable Forwarded Headers for reverse proxies (Nginx / Cloudflare / HTTPS on VPS)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 // ----------------------
 // Middleware
@@ -71,6 +101,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));

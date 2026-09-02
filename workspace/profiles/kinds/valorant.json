@@ -1,11 +1,11 @@
 {
-  "KindKey": "lol",
-  "YoutubeChannelId": "UCzBj5rk8gqEpJcagoovemuQ",
-  "YoutubeClientId": "825543487148-i9kpv72al25881rbqe9bfrbcvt04knoh.apps.googleusercontent.com",
-  "YoutubeClientSecret": "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",
-  "YoutubeRefreshToken": "1//04tjYrQ45f0l6CgYIARAAGAQSNwF-L9IrXHvfgEDYtG5zoRjVS7R-kh0l3p1XOnvF0gcrOVTrAgfJn9_CyRemY097M2pqaBWDRSk",
+  "KindKey": "valorant",
+  "YoutubeChannelId": "UC3A5J4cdjuzCn8rQKH-iCNQ",
+  "YoutubeClientId": "578620244358-6i2if9e46tn6si9lbumkc2km0epoamqi.apps.googleusercontent.com",
+  "YoutubeClientSecret": "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",
+  "YoutubeRefreshToken": "1//03Jb4yf8Zmu70CgYIARAAGAMSNwF-L9IrK1gYSh5q0erhZTyLXPNx_4FdnR2x-grEBTLz0QYv_iLMji0dQ8jWwedcdo8iEPMVxkw",
   "UploadConfig": {
-    "MinDelayHours": 6,
+    "MinDelayHours": 8,
     "LastUploadTime": "2025-12-17T00:00:00.00Z",
     "UploadCounter": 0,
     "Enabled": false
