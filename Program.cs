@@ -85,11 +85,14 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Enable Forwarded Headers for reverse proxies (Nginx / Cloudflare / HTTPS on VPS)
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+// Enable Forwarded Headers for reverse proxies (Nginx / Ngrok / Cloudflare / HTTPS on VPS)
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 // ----------------------
 // Middleware
