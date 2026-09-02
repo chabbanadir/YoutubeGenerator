@@ -6,7 +6,7 @@
   "UploadConfig": {
     "MinDelayHours": 8,
     "LastUploadTime": "2025-12-18T00:00:00Z",
-    "UploadCounter": 3,
+    "UploadCounter": 0,
     "Enabled": false
   }
 }
