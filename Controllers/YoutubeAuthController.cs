@@ -30,6 +30,23 @@ namespace YoutubeGenerator.Controllers
             });
         }
 
+        private string GetRedirectUri()
+        {
+            var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() 
+                         ?? Request.Scheme;
+
+            var host = Request.Headers["X-Forwarded-Host"].FirstOrDefault() 
+                       ?? Request.Host.Value;
+
+            if (host.Contains("ngrok", StringComparison.OrdinalIgnoreCase) || 
+                string.Equals(Request.Headers["X-Forwarded-Proto"].FirstOrDefault(), "https", StringComparison.OrdinalIgnoreCase))
+            {
+                scheme = "https";
+            }
+
+            return $"{scheme}://{host}/api/youtube/callback";
+        }
+
         [HttpGet("auth-url")]
         public IActionResult GetAuthUrl([FromQuery] string kind)
         {
@@ -40,8 +57,7 @@ namespace YoutubeGenerator.Controllers
 
             try
             {
-                var redirectUri = Url.Action("Callback", "YoutubeAuth", null, Request.Scheme) 
-                                 ?? $"{Request.Scheme}://{Request.Host}/api/youtube/callback";
+                var redirectUri = GetRedirectUri();
 
                 var url = _authService.GetAuthorizationUrl(kind.Trim().ToLowerInvariant(), redirectUri);
                 return Ok(new { url, kind = kind.Trim().ToLowerInvariant() });
@@ -69,8 +85,7 @@ namespace YoutubeGenerator.Controllers
 
             try
             {
-                var redirectUri = Url.Action("Callback", "YoutubeAuth", null, Request.Scheme) 
-                                 ?? $"{Request.Scheme}://{Request.Host}/api/youtube/callback";
+                var redirectUri = GetRedirectUri();
 
                 var (refreshToken, accessToken, channelId, channelTitle) = 
                     await _authService.ExchangeCodeAndFetchChannelAsync(code, redirectUri);
