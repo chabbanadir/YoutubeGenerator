@@ -278,13 +278,13 @@ namespace YoutubeGenerator.Services
             sb.AppendLine($"- Example style: '🔥 INSANE {profile.KindKey.ToUpper()} Plays - Epic Moments #127'");
             sb.AppendLine();
 
-            sb.AppendLine("### Description (200-400 words):");
+            sb.AppendLine("### Description (100-250 words, maximum 1500 characters):");
             sb.AppendLine("- Start with a hook (2-3 sentences)");
             sb.AppendLine("- Mention top streamers featured");
             sb.AppendLine("- Include relevant keywords naturally");
             sb.AppendLine("- End with a call-to-action (subscribe/like)");
             sb.AppendLine("- DO NOT include social media links or timestamps (I'll add them)");
-            sb.AppendLine("- Keep it engaging and professional");
+            sb.AppendLine("- Keep it concise and professional (must leave room for timestamps & links)");
             sb.AppendLine();
 
             sb.AppendLine("## OUTPUT FORMAT:");
@@ -363,7 +363,7 @@ namespace YoutubeGenerator.Services
             var kindKeyClean = profile.KindKey.Replace(" ", "");
             sb.AppendLine($"#Gaming #{kindKeyClean} #Highlights #EpicMoments #Twitch #Compilation");
 
-            return sb.ToString().Trim();
+            return TextFormatter.FixDescription(sb.ToString(), 4800);
         }
 
         private string BuildFallbackDescription(MontageItem package, MontageProfile profile)
@@ -393,7 +393,7 @@ namespace YoutubeGenerator.Services
 
             sb.AppendLine("Don't forget to like and subscribe for more content!");
 
-            return sb.ToString();
+            return TextFormatter.FixDescription(sb.ToString(), 4800);
         }
 
         private string CleanTitle(string title)

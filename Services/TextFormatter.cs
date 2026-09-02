@@ -1,10 +1,10 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 namespace YoutubeGenerator.Services
 {
     public static class TextFormatter
     {
-        public static string FixDescription(string input)
+        public static string FixDescription(string input, int maxLength = 4800)
         {
             if (string.IsNullOrWhiteSpace(input))
                 return input;
@@ -43,7 +43,22 @@ namespace YoutubeGenerator.Services
                 text = text.Trim() + "\n\n" + hashtags;
             }
 
-            return text.Trim();
+            text = text.Trim();
+
+            // YouTube description hard limit is 5000 characters.
+            // Truncate safely at max 4800 characters to prevent YouTube API validation errors.
+            if (text.Length > maxLength)
+            {
+                var truncated = text.Substring(0, maxLength - 10);
+                int lastSpace = truncated.LastIndexOf(' ');
+                if (lastSpace > maxLength / 2)
+                {
+                    truncated = truncated.Substring(0, lastSpace);
+                }
+                text = truncated + "\n...";
+            }
+
+            return text;
         }
     }
 

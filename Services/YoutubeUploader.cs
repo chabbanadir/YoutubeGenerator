@@ -1,4 +1,4 @@
-﻿using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Services;
@@ -53,13 +53,15 @@ namespace YoutubeGenerator.Services
 
 
 
+            var safeDescription = TextFormatter.FixDescription(description ?? "", 4800);
+
             var video = new Video
             {
 
                 Snippet = new VideoSnippet
                 {
                     Title = title,
-                    Description = description,
+                    Description = safeDescription,
                     CategoryId = "24"
                 },
                 Status = new VideoStatus
