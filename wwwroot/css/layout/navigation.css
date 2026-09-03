@@ -1,0 +1,92 @@
+/* Main Container & Tabs Navigation */
+.app-container {
+  display: flex;
+  flex: 1;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem 2rem;
+  gap: 1.5rem;
+}
+
+.tabs-nav {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.2rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+  color: white;
+  background: rgba(99, 102, 241, 0.25);
+  border-bottom: 2px solid var(--primary);
+}
+
+.tab-view {
+  display: none;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.tab-view.active {
+  display: flex;
+}
+
+/* Pipeline Flow Ribbon */
+.pipeline-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.pipeline-step {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  text-align: center;
+  position: relative;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.pipeline-step:hover {
+  background: rgba(51, 65, 85, 0.7);
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.pipeline-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.pipeline-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
