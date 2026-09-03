@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -42,7 +42,7 @@ namespace YoutubeGenerator.Services
             if (!string.IsNullOrEmpty(end)) timeArgs += $"-to {end} ";
 
             // ------------------------------------------------------------
-            // ⭐ The PERFECT FFmpeg pipeline
+            // ⭐ Fast & Accurate FFmpeg pipeline
             // ------------------------------------------------------------
             string args =
                 $"-y {timeArgs} -i \"{inputFile}\" " +
@@ -51,10 +51,10 @@ namespace YoutubeGenerator.Services
                     "scale=1920:1080:force_original_aspect_ratio=decrease," +
                     "pad=1920:1080:(ow-iw)/2:(oh-ih)/2," +
                     "format=yuv420p\" " +
-                // audio loudness normalization (BBC standard)
+                // audio loudness normalization
                 "-af \"loudnorm=I=-14:TP=-1.5:LRA=11\" " +
-                // re-encode video (CPU = accurate)
-                "-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p " +
+                // fast video re-encode
+                "-c:v libx264 -preset superfast -crf 20 -pix_fmt yuv420p " +
                 // re-encode audio
                 "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
                 $"\"{outputPath}\"";
@@ -73,13 +73,8 @@ namespace YoutubeGenerator.Services
             };
         }
 
-        // -----------------------------------------------------------------------------------
-        // 🚫 This method is no longer needed — but keep it for intro merging
-        // -----------------------------------------------------------------------------------
         public async Task NormalizeVideoOnlyAsync(string filePath)
         {
-            // THIS IS NOW HANDLED INSIDE TrimAsync
-            // Keep this as a safe fallback with audio normalization + reencode
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("Video not found", filePath);
 
@@ -91,7 +86,7 @@ namespace YoutubeGenerator.Services
                       "scale=1920:1080:force_original_aspect_ratio=decrease," +
                       "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p\" " +
                 "-af \"loudnorm=I=-14:TP=-1.5:LRA=11\" " +
-                "-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p " +
+                "-c:v libx264 -preset superfast -crf 20 -pix_fmt yuv420p " +
                 "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
                 $"\"{tempOut}\"";
 
@@ -100,8 +95,6 @@ namespace YoutubeGenerator.Services
             File.Delete(filePath);
             File.Move(tempOut, filePath);
         }
-
-        // Keep your intro concatenation logic if needed
 
         public async Task<bool> PrependIntroAsync(
              string introPath,
@@ -122,12 +115,11 @@ namespace YoutubeGenerator.Services
                 $"file '{introPath.Replace("\\", "/")}'\n" +
                 $"file '{firstClipPath.Replace("\\", "/")}'\n");
 
-            // 2. Concat BUT reencode AUDIO ONLY
+            // 2. Concat with video stream copy
             string args =
                 $"-y -f concat -safe 0 -i \"{concatListPath}\" " +
-                "-c:v copy -c:a aac -b:a 192k " +  // AUDIO FIX
+                "-c:v copy -c:a aac -b:a 192k " +
                 $"\"{tempOutputPath}\"";
-
 
             var psi = new ProcessStartInfo
             {
@@ -150,11 +142,9 @@ namespace YoutubeGenerator.Services
             File.Delete(firstClipPath);
             File.Move(tempOutputPath, firstClipPath);
 
-            // 3. Normalize again to ensure perfect match with the other clips
-            await NormalizeVideoOnlyAsync(firstClipPath);
-
-            // 4. Cleanup
-            File.Delete(concatListPath);
+            // 3. Cleanup
+            if (File.Exists(concatListPath))
+                File.Delete(concatListPath);
 
             return true;
         }

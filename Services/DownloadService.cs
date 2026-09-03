@@ -1,4 +1,4 @@
-﻿using YoutubeGenerator.Interfaces;
+using YoutubeGenerator.Interfaces;
 using YoutubeGenerator.Models;
 using YoutubeGenerator.Utils;
 
@@ -20,13 +20,10 @@ namespace YoutubeGenerator.Services
             if (File.Exists(outputPath))
                 return new DownloadResult { Success = true, FilePath = outputPath };
 
-            // ⭐ VERY IMPORTANT ⭐
-            // FORCE re-encode => guaranteed uniform audio/video format
+            // Stream direct download & remux to MP4 container (no full-video re-encoding)
             string args =
-                $"-f \"bv*+ba/b\" " +
+                $"-f \"bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b\" " +
                 $"--merge-output-format mp4 " +
-                $"--recode-video mp4 " +
-                $"--postprocessor-args \"-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -vf scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2\" " +
                 $"-o \"{outputPath}\" " +
                 $"\"{clip.Link}\"";
 
