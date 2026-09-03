@@ -1,21 +1,22 @@
-// Authentication UI & Action Handlers
+// Core Authentication Module
+import { state, escapeHtml, showToast } from './api.js';
 
-async function checkAuthStatus() {
+export async function checkAuthStatus(callbacks = {}) {
   try {
     const res = await fetch('/api/auth/status');
     if (res.ok) {
       const status = await res.json();
-      isAuthenticatedUser = status.isAuthenticated;
-      updateAuthUI(status);
+      state.isAuthenticatedUser = status.isAuthenticated;
+      updateAuthUI(status, callbacks);
     }
   } catch (err) {
     console.error('Failed to check auth status:', err);
   } finally {
-    fetchDashboardOverview();
+    if (callbacks.onOverviewRefresh) callbacks.onOverviewRefresh();
   }
 }
 
-function updateAuthUI(status) {
+export function updateAuthUI(status, callbacks = {}) {
   const pill = document.getElementById('authStatusPill');
   const text = document.getElementById('authStatusText');
   const loginBtn = document.getElementById('loginModalBtn');
@@ -77,30 +78,30 @@ function updateAuthUI(status) {
     // Switch back to overview tab if unauthenticated user is on profiles view
     const profilesView = document.getElementById('tab-profiles');
     if (profilesView && profilesView.classList.contains('active')) {
-      switchTab('overview');
+      if (callbacks.onSwitchTab) callbacks.onSwitchTab('overview');
     }
   }
 
   if (document.getElementById('tab-profiles') && document.getElementById('tab-profiles').classList.contains('active')) {
-    fetchProfilesData();
+    if (callbacks.onFetchProfiles) callbacks.onFetchProfiles();
   }
 
   if (window.lucide) lucide.createIcons({ targets: [pill, jsonEditorStatus] });
 }
 
-function openLoginModal() {
+export function openLoginModal() {
   const modal = document.getElementById('loginModal');
   const errorMsg = document.getElementById('loginErrorMsg');
   if (errorMsg) errorMsg.style.display = 'none';
   if (modal) modal.classList.add('active');
 }
 
-function closeLoginModal() {
+export function closeLoginModal() {
   const modal = document.getElementById('loginModal');
   if (modal) modal.classList.remove('active');
 }
 
-async function handleLogin(e) {
+export async function handleLogin(e, callbacks = {}) {
   e.preventDefault();
   const usernameInput = document.getElementById('loginUsername');
   const passwordInput = document.getElementById('loginPassword');
@@ -133,8 +134,8 @@ async function handleLogin(e) {
     usernameInput.value = '';
     passwordInput.value = '';
 
-    await checkAuthStatus();
-    loadSelectedBag(currentSelectedBag);
+    await checkAuthStatus(callbacks);
+    if (callbacks.onLoadSelectedBag) callbacks.onLoadSelectedBag(state.currentSelectedBag);
   } catch (err) {
     console.error('Login error:', err);
     if (errorMsg) {
@@ -146,13 +147,13 @@ async function handleLogin(e) {
   }
 }
 
-async function handleLogout() {
+export async function handleLogout(callbacks = {}) {
   try {
     const res = await fetch('/api/auth/logout', { method: 'POST' });
     if (res.ok) {
       showToast('Logged out successfully', 'info');
-      await checkAuthStatus();
-      loadSelectedBag(currentSelectedBag);
+      await checkAuthStatus(callbacks);
+      if (callbacks.onLoadSelectedBag) callbacks.onLoadSelectedBag(state.currentSelectedBag);
     }
   } catch (err) {
     console.error('Logout error:', err);

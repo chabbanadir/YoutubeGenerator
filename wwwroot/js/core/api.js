@@ -1,7 +1,19 @@
-// Shared State and Common Utilities API
+// Core API & Utility Module
 
-// Helper for authenticated & credentials-included fetch requests
-async function fetchWithAuth(url, options = {}) {
+// Shared State Object for Reactive Sync Across Modules
+export const state = {
+  currentOverviewData: null,
+  currentSelectedBag: 'bag_download.json',
+  currentBagData: [],
+  currentRawJson: '',
+  currentBagViewMode: 'cards', // 'cards' | 'json'
+  isAuthenticatedUser: false,
+  isCurrentBagRedacted: false,
+  profilesData: { kinds: [], subkinds: [] }
+};
+
+// Helper for authenticated fetch requests
+export async function fetchWithAuth(url, options = {}) {
   const defaultOptions = {
     credentials: 'include'
   };
@@ -9,18 +21,8 @@ async function fetchWithAuth(url, options = {}) {
   return fetch(url, mergedOptions);
 }
 
-// Global State
-let currentOverviewData = null;
-let currentSelectedBag = 'bag_download.json';
-let currentBagData = [];
-let currentRawJson = '';
-let currentBagViewMode = 'cards'; // 'cards' | 'json'
-let isAuthenticatedUser = false;
-let isCurrentBagRedacted = false;
-let profilesData = { kinds: [], subkinds: [] };
-
 // Toast Notification Helper
-function showToast(message, type = 'info') {
+export function showToast(message, type = 'info') {
   const container = document.getElementById('toastContainer');
   if (!container) return;
 
@@ -34,7 +36,7 @@ function showToast(message, type = 'info') {
 
   toast.innerHTML = `
     <i data-lucide="${iconName}"></i>
-    <span>${message}</span>
+    <span>${escapeHtml(message)}</span>
   `;
 
   container.appendChild(toast);
@@ -49,7 +51,7 @@ function showToast(message, type = 'info') {
 }
 
 // Copy to Clipboard Helper
-function copyToClipboard(text, label = 'Content') {
+export function copyToClipboard(text, label = 'Content') {
   if (!text) return;
   navigator.clipboard.writeText(text).then(() => {
     showToast(`${label} copied to clipboard!`, 'success');
@@ -60,12 +62,12 @@ function copyToClipboard(text, label = 'Content') {
 }
 
 // String Sanitization Helpers
-function escapeHtml(str) {
+export function escapeHtml(str) {
   if (typeof str !== 'string') return String(str ?? '');
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function escapeJsString(str) {
+export function escapeJsString(str) {
   if (str === null || str === undefined) return '';
   return String(str)
     .replace(/\\/g, '\\\\')
@@ -76,7 +78,7 @@ function escapeJsString(str) {
 }
 
 // Formatting Helpers
-function formatFileSize(bytes) {
+export function formatFileSize(bytes) {
   if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -84,7 +86,7 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-function formatDate(isoStr) {
+export function formatDate(isoStr) {
   if (!isoStr) return 'N/A';
   const date = new Date(isoStr);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' (' + date.toLocaleDateString() + ')';

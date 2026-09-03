@@ -1,6 +1,7 @@
-// Game Kinds Profiles Management Logic
+// Game Kinds Management Module
+import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth } from '../core/api.js';
 
-function renderKindsGrid(kinds) {
+export function renderKindsGrid(kinds, callbacks = {}) {
   const container = document.getElementById('kindsGrid');
   if (!container) return;
 
@@ -13,7 +14,6 @@ function renderKindsGrid(kinds) {
     const data = k.data || {};
     const uploadCfg = data.UploadConfig || {};
     const isEnabled = uploadCfg.Enabled === true;
-    const isRedacted = k.isRedacted;
     const kindKey = (k.name || '').toLowerCase();
     const kindTitle = k.name ? k.name.toUpperCase() : 'UNKNOWN';
     const escapedFileName = escapeHtml(k.fileName);
@@ -41,11 +41,11 @@ function renderKindsGrid(kinds) {
             <span class="profile-filename" title="${escapedFileName}">${escapedFileName}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
-            ${isAuthenticatedUser ? `
-              <button type="button" class="save-kind-btn" id="save-btn-${escapedFileName}" style="display: none;" onclick="saveKindCard('${safeFileName}')">
+            ${state.isAuthenticatedUser ? `
+              <button type="button" class="save-kind-btn" id="save-btn-${escapedFileName}" style="display: none;" onclick="window.saveKindCard('${safeFileName}')">
                 <i data-lucide="save" style="width: 14px; height: 14px;"></i> Save
               </button>
-              <button type="button" class="btn-delete-profile" onclick="promptDeleteProfile('kind', '${safeFileName}')" title="Delete Kind Profile">
+              <button type="button" class="btn-delete-profile" onclick="window.promptDeleteProfile('kind', '${safeFileName}')" title="Delete Kind Profile">
                 <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Delete
               </button>
             ` : ''}
@@ -57,8 +57,7 @@ function renderKindsGrid(kinds) {
             <span><i data-lucide="youtube" style="width: 14px; height: 14px; color: #ef4444;"></i> YouTube Channel Integration</span>
             ${hasRefreshToken 
               ? `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem;"><i data-lucide="check-circle" style="width: 11px; height: 11px; display: inline;"></i> Connected</span>`
-              : `<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem;"><i data-lucide="alert-triangle" style="width: 11px; height: 11px; display: inline;"></i> Not Connected</span>`
-            }
+              : `<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem;"><i data-lucide="alert-triangle" style="width: 11px; height: 11px; display: inline;"></i> Not Connected</span>`}
           </div>
 
           ${channelTitle ? `
@@ -68,13 +67,13 @@ function renderKindsGrid(kinds) {
           ` : ''}
 
           <div class="profile-channel-bar" style="gap: 0.5rem; margin-top: 0.35rem;">
-            ${isAuthenticatedUser ? `
+            ${state.isAuthenticatedUser ? `
               <input type="text"
                      class="form-control channel-id-input"
                      id="channel-input-${escapedFileName}"
                      value="${escapeHtml(channelId)}"
                      placeholder="Channel ID (e.g. UCz...)"
-                     oninput="onKindCardModified('${safeFileName}')"
+                     oninput="window.onKindCardModified('${safeFileName}')"
                      style="background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(96, 165, 250, 0.3); color: #60a5fa; font-family: monospace; font-size: 0.82rem; font-weight: 600; padding: 0.3rem 0.55rem; border-radius: 6px; flex: 1; outline: none;" />
               <div style="display: flex; gap: 0.3rem;">
                 ${channelId ? `
@@ -82,7 +81,7 @@ function renderKindsGrid(kinds) {
                     <i data-lucide="external-link" style="width: 12px; height: 12px;"></i>
                   </a>
                 ` : ''}
-                <button type="button" class="btn btn-secondary" style="padding: 0.25rem 0.45rem; font-size: 0.72rem;" onclick="copyToClipboard(document.getElementById('channel-input-${escapedFileName}').value, 'Channel ID')" title="Copy Channel ID">
+                <button type="button" class="btn btn-secondary" style="padding: 0.25rem 0.45rem; font-size: 0.72rem;" onclick="window.copyToClipboard(document.getElementById('channel-input-${escapedFileName}').value, 'Channel ID')" title="Copy Channel ID">
                   <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
                 </button>
               </div>
@@ -94,7 +93,7 @@ function renderKindsGrid(kinds) {
                     <i data-lucide="external-link" style="width: 12px; height: 12px;"></i>
                   </a>
                 ` : ''}
-                <button type="button" class="btn btn-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" onclick="copyToClipboard('${escapeJsString(channelId)}', 'Channel ID')" title="Copy Channel ID">
+                <button type="button" class="btn btn-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" onclick="window.copyToClipboard('${escapeJsString(channelId)}', 'Channel ID')" title="Copy Channel ID">
                   <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
                 </button>
               </div>
@@ -110,8 +109,8 @@ function renderKindsGrid(kinds) {
             <div class="profile-stat-box" style="position: relative; padding: 0.4rem 0.5rem; display: flex; flex-direction: column; align-items: center;">
               <span class="profile-stat-label">Min Delay</span>
               <div style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-top: 0.15rem;">
-                ${isAuthenticatedUser ? `
-                  <button type="button" class="btn-step-counter" onclick="stepKindMinDelay('${safeFileName}', -1)" title="Decrease delay by 1 hour">
+                ${state.isAuthenticatedUser ? `
+                  <button type="button" class="btn-step-counter" onclick="window.stepKindMinDelay('${safeFileName}', -1)" title="Decrease delay by 1 hour">
                     -
                   </button>
                 ` : ''}
@@ -119,8 +118,8 @@ function renderKindsGrid(kinds) {
                   <span class="profile-stat-value min-delay-value" id="min-delay-val-${escapedFileName}" style="color: #60a5fa; font-weight: 700;">${uploadCfg.MinDelayHours ?? 8}</span>
                   <span style="font-size: 0.75rem; color: #60a5fa; font-weight: 600;">hrs</span>
                 </div>
-                ${isAuthenticatedUser ? `
-                  <button type="button" class="btn-step-counter" onclick="stepKindMinDelay('${safeFileName}', 1)" title="Increase delay by 1 hour">
+                ${state.isAuthenticatedUser ? `
+                  <button type="button" class="btn-step-counter" onclick="window.stepKindMinDelay('${safeFileName}', 1)" title="Increase delay by 1 hour">
                     +
                   </button>
                 ` : ''}
@@ -146,14 +145,14 @@ function renderKindsGrid(kinds) {
             <div style="font-size: 0.78rem; color: #34d399; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
               <i data-lucide="shield-check" style="width: 14px; height: 14px;"></i> YouTube Linked & Ready
             </div>
-            <button type="button" class="btn-youtube-disconnect" onclick="disconnectYoutubeChannel('${safeKindKey}')" title="Disconnect YouTube channel">
+            <button type="button" class="btn-youtube-disconnect" onclick="window.disconnectYoutubeChannel('${safeKindKey}')" title="Disconnect YouTube channel">
               <i data-lucide="log-out" style="width: 13px; height: 13px;"></i> Logout
             </button>
           ` : `
             <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.35rem;">
               <i data-lucide="alert-circle" style="width: 14px; height: 14px; color: #f59e0b;"></i> Unlinked Channel
             </div>
-            <button type="button" class="btn-youtube-connect" onclick="connectYoutubeChannel('${safeKindKey}')" title="Link YouTube channel via Google OAuth">
+            <button type="button" class="btn-youtube-connect" onclick="window.connectYoutubeChannel('${safeKindKey}')" title="Link YouTube channel via Google OAuth">
               <i data-lucide="youtube" style="width: 14px; height: 14px;"></i> Connect YouTube
             </button>
           `}
@@ -165,7 +164,7 @@ function renderKindsGrid(kinds) {
   if (window.lucide) lucide.createIcons();
 }
 
-function stepKindMinDelay(fileName, delta) {
+export function stepKindMinDelay(fileName, delta) {
   const safeFileName = escapeJsString(fileName);
   const valSpan = document.getElementById(`min-delay-val-${safeFileName}`);
   if (!valSpan) return;
@@ -177,7 +176,7 @@ function stepKindMinDelay(fileName, delta) {
   onKindCardModified(fileName);
 }
 
-function onKindCardModified(fileName) {
+export function onKindCardModified(fileName) {
   const safeFileName = escapeJsString(fileName);
   const saveBtn = document.getElementById(`save-btn-${safeFileName}`);
   if (saveBtn) {
@@ -190,7 +189,7 @@ function onKindCardModified(fileName) {
   }
 }
 
-async function saveKindCard(fileName) {
+export async function saveKindCard(fileName) {
   const safeFileName = escapeJsString(fileName);
   const saveBtn = document.getElementById(`save-btn-${safeFileName}`);
   const channelInput = document.getElementById(`channel-input-${safeFileName}`);
@@ -240,10 +239,10 @@ async function saveKindCard(fileName) {
   }
 }
 
-function openCreateKindModal() {
-  if (!isAuthenticatedUser) {
+export function openCreateKindModal(callbacks = {}) {
+  if (!state.isAuthenticatedUser) {
     showToast('You must be logged in to create a Kind profile.', 'warning');
-    openLoginModal();
+    if (callbacks.onOpenLoginModal) callbacks.onOpenLoginModal();
     return;
   }
   document.getElementById('createKindForm').reset();
@@ -251,11 +250,11 @@ function openCreateKindModal() {
   document.getElementById('createKindModal').classList.add('active');
 }
 
-function closeCreateKindModal() {
+export function closeCreateKindModal() {
   document.getElementById('createKindModal').classList.remove('active');
 }
 
-async function handleCreateKind(e) {
+export async function handleCreateKind(e, callbacks = {}) {
   e.preventDefault();
   const keyInput = document.getElementById('newKindKey').value.trim().toLowerCase();
   if (!keyInput) return;
@@ -293,7 +292,7 @@ async function handleCreateKind(e) {
 
     showToast(`Kind profile '${keyInput}' created successfully!`, 'success');
     closeCreateKindModal();
-    await fetchProfilesData();
+    if (callbacks.onFetchProfiles) await callbacks.onFetchProfiles();
   } catch (err) {
     errEl.innerText = err.message;
     errEl.style.display = 'block';
@@ -303,7 +302,7 @@ async function handleCreateKind(e) {
   }
 }
 
-async function handleCreateAndConnectKind(e) {
+export async function handleCreateAndConnectKind(e, callbacks = {}) {
   if (e) e.preventDefault();
   const keyInput = document.getElementById('newKindKey').value.trim().toLowerCase();
   const errEl = document.getElementById('createKindErrorMsg');
@@ -361,7 +360,7 @@ async function handleCreateAndConnectKind(e) {
   }
 }
 
-async function connectYoutubeChannel(kindKey) {
+export async function connectYoutubeChannel(kindKey) {
   try {
     const res = await fetch(`/api/youtube/auth-url?kind=${encodeURIComponent(kindKey)}`);
     const data = await res.json();
@@ -380,10 +379,10 @@ async function connectYoutubeChannel(kindKey) {
   }
 }
 
-async function disconnectYoutubeChannel(kindKey) {
-  if (!isAuthenticatedUser) {
+export async function disconnectYoutubeChannel(kindKey, callbacks = {}) {
+  if (!state.isAuthenticatedUser) {
     showToast('You must be logged in to disconnect YouTube channel.', 'warning');
-    openLoginModal();
+    if (callbacks.onOpenLoginModal) callbacks.onOpenLoginModal();
     return;
   }
   if (!confirm(`Are you sure you want to disconnect YouTube channel for '${kindKey.toUpperCase()}'? This will remove the stored Refresh Token.`)) {
@@ -397,9 +396,7 @@ async function disconnectYoutubeChannel(kindKey) {
     const data = await res.json();
     if (res.ok && data.success) {
       showToast(data.message || `Disconnected YouTube channel for '${kindKey}'.`, 'success');
-      if (typeof fetchProfilesData === 'function') {
-        await fetchProfilesData();
-      }
+      if (callbacks.onFetchProfiles) await callbacks.onFetchProfiles();
     } else {
       showToast(data.error || data.message || 'Failed to disconnect YouTube channel.', 'error');
     }

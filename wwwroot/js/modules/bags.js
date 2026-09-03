@@ -1,7 +1,8 @@
-// Pipeline Bags Explorer & Raw JSON Editing Logic
+// Pipeline Bags Explorer & Raw JSON Editing Module
+import { state, showToast, escapeHtml, escapeJsString, formatFileSize, formatDate } from '../core/api.js';
 
-function setBagViewMode(mode) {
-  currentBagViewMode = mode;
+export function setBagViewMode(mode) {
+  state.currentBagViewMode = mode;
   const btnCards = document.getElementById('btnModeCards');
   const btnJson = document.getElementById('btnModeJson');
   if (btnCards) btnCards.classList.toggle('active', mode === 'cards');
@@ -9,10 +10,10 @@ function setBagViewMode(mode) {
   renderBagContent();
 }
 
-function openEditBagModal() {
-  if (!isAuthenticatedUser) {
+export function openEditBagModal(callbacks = {}) {
+  if (!state.isAuthenticatedUser) {
     showToast('Please login as Admin to edit bags', 'warning');
-    openLoginModal();
+    if (callbacks.onOpenLoginModal) callbacks.onOpenLoginModal();
     return;
   }
 
@@ -24,7 +25,7 @@ function openEditBagModal() {
   }
 }
 
-async function handleSaveRawJsonInline() {
+export async function handleSaveRawJsonInline(callbacks = {}) {
   const textarea = document.getElementById('bagJsonTextarea');
   const saveBtn = document.getElementById('btnSaveRawJson');
   const errorMsg = document.getElementById('jsonInlineErrorMsg');
@@ -35,7 +36,7 @@ async function handleSaveRawJsonInline() {
 
   // If empty input, default to {} for worker status or [] for item bags
   if (!rawJsonInput) {
-    if (currentSelectedBag && currentSelectedBag.startsWith('worker_')) {
+    if (state.currentSelectedBag && state.currentSelectedBag.startsWith('worker_')) {
       rawJsonInput = '{}';
     } else {
       rawJsonInput = '[]';
@@ -60,7 +61,7 @@ async function handleSaveRawJsonInline() {
   if (errorMsg) errorMsg.style.display = 'none';
 
   try {
-    const res = await fetch(`/api/dashboard/bags/${encodeURIComponent(currentSelectedBag)}`, {
+    const res = await fetch(`/api/dashboard/bags/${encodeURIComponent(state.currentSelectedBag)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(parsedObject)
@@ -72,11 +73,11 @@ async function handleSaveRawJsonInline() {
     }
 
     const data = await res.json();
-    showToast(data.message || `Saved changes to ${currentSelectedBag}!`, 'success');
+    showToast(data.message || `Saved changes to ${state.currentSelectedBag}!`, 'success');
 
     // Reload active view to refresh cards & stats
-    fetchDashboardOverview(false);
-    loadSelectedBag(currentSelectedBag);
+    if (callbacks.onOverviewRefresh) callbacks.onOverviewRefresh();
+    loadSelectedBag(state.currentSelectedBag, callbacks);
   } catch (err) {
     console.error('Error saving raw JSON content:', err);
     if (errorMsg) {
@@ -89,7 +90,7 @@ async function handleSaveRawJsonInline() {
   }
 }
 
-function formatRawJson() {
+export function formatRawJson() {
   const textarea = document.getElementById('bagJsonTextarea');
   const errorMsg = document.getElementById('jsonInlineErrorMsg');
   if (!textarea) return;
@@ -108,23 +109,23 @@ function formatRawJson() {
   }
 }
 
-function resetRawJson() {
+export function resetRawJson() {
   const textarea = document.getElementById('bagJsonTextarea');
   const errorMsg = document.getElementById('jsonInlineErrorMsg');
-  if (textarea) textarea.value = currentRawJson;
+  if (textarea) textarea.value = state.currentRawJson;
   if (errorMsg) errorMsg.style.display = 'none';
   showToast('Reset to original bag content', 'info');
 }
 
 // Open Bag in Explorer Tab
-function openBagInExplorer(bagFileName) {
-  switchTab('bags');
-  loadSelectedBag(bagFileName);
+export function openBagInExplorer(bagFileName, callbacks = {}) {
+  if (callbacks.onSwitchTab) callbacks.onSwitchTab('bags');
+  loadSelectedBag(bagFileName, callbacks);
 }
 
 // Load Bag Contents
-async function loadSelectedBag(bagFileName) {
-  currentSelectedBag = bagFileName;
+export async function loadSelectedBag(bagFileName, callbacks = {}) {
+  state.currentSelectedBag = bagFileName;
   
   // Highlight active sidebar item and mobile ribbon pill
   document.querySelectorAll('.bag-item-btn, .mobile-bag-pill').forEach(btn => {
@@ -138,7 +139,7 @@ async function loadSelectedBag(bagFileName) {
   const editBtn = document.getElementById('btnEditBag');
 
   if (titleEl) {
-    const stageInfo = typeof getBagStageInfo === 'function' ? getBagStageInfo(bagFileName) : { title: bagFileName, icon: getBagIcon(bagFileName), color: getBagColor(bagFileName) };
+    const stageInfo = getBagStageInfo(bagFileName);
     titleEl.innerHTML = `
       <div class="selected-stage-header">
         <i data-lucide="${stageInfo.icon}" style="color: ${stageInfo.color}; width: 16px; height: 16px;"></i>
@@ -154,9 +155,9 @@ async function loadSelectedBag(bagFileName) {
     
     // Handle 403 Forbidden (Guest trying to read sensitive config/env files)
     if (res.status === 403) {
-      isCurrentBagRedacted = true;
-      currentRawJson = JSON.stringify({ error: "Access Restricted", message: "This sensitive configuration file requires Admin login." }, null, 2);
-      currentBagData = [];
+      state.isCurrentBagRedacted = true;
+      state.currentRawJson = JSON.stringify({ error: "Access Restricted", message: "This sensitive configuration file requires Admin login." }, null, 2);
+      state.currentBagData = [];
 
       if (redactedBadge) redactedBadge.style.display = 'inline-flex';
       if (editBtn) editBtn.style.display = 'none';
@@ -164,35 +165,35 @@ async function loadSelectedBag(bagFileName) {
       const countEl = document.getElementById('selectedBagItemCount');
       if (countEl) countEl.innerText = 'Restricted';
 
-      renderRestrictedState(bagFileName);
+      renderRestrictedState(bagFileName, callbacks);
       return;
     }
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
-    currentRawJson = data.rawJson || '[]';
-    currentBagData = data.parsed || [];
-    isCurrentBagRedacted = data.isRedacted || false;
+    state.currentRawJson = data.rawJson || '[]';
+    state.currentBagData = data.parsed || [];
+    state.isCurrentBagRedacted = data.isRedacted || false;
 
     // Redacted badge & edit button visibility
     if (redactedBadge) {
-      redactedBadge.style.display = isCurrentBagRedacted ? 'inline-flex' : 'none';
+      redactedBadge.style.display = state.isCurrentBagRedacted ? 'inline-flex' : 'none';
     }
 
     if (editBtn) {
-      editBtn.style.display = isAuthenticatedUser ? 'inline-flex' : 'none';
+      editBtn.style.display = state.isAuthenticatedUser ? 'inline-flex' : 'none';
     }
 
     const textarea = document.getElementById('bagJsonTextarea');
     if (textarea) {
-      textarea.value = currentRawJson;
-      textarea.readOnly = !isAuthenticatedUser;
+      textarea.value = state.currentRawJson;
+      textarea.readOnly = !state.isAuthenticatedUser;
     }
 
     const countEl = document.getElementById('selectedBagItemCount');
     if (countEl) {
-      const count = Array.isArray(currentBagData) ? currentBagData.length : (currentBagData ? 1 : 0);
+      const count = Array.isArray(state.currentBagData) ? state.currentBagData.length : (state.currentBagData ? 1 : 0);
       countEl.innerText = `${count} item(s)`;
     }
 
@@ -209,7 +210,7 @@ async function loadSelectedBag(bagFileName) {
 }
 
 // Render Restricted state for 403 files
-function renderRestrictedState(fileName) {
+export function renderRestrictedState(fileName, callbacks = {}) {
   const cardsContainer = document.getElementById('cardsViewContainer');
   const jsonContainer = document.getElementById('jsonViewContainer');
   const summaryBanner = document.getElementById('inspectorSummaryBanner');
@@ -226,21 +227,25 @@ function renderRestrictedState(fileName) {
         <p style="color: var(--text-muted); max-width: 420px; margin: 0.5rem auto 1.5rem auto; font-size: 0.9rem; line-height: 1.5;">
           <strong>${escapeHtml(fileName)}</strong> contains sensitive system settings or security credentials. Log in as an Administrator to view and manage this file.
         </p>
-        <button class="btn btn-primary" onclick="openLoginModal()">
+        <button class="btn btn-primary" id="restrictedStateLoginBtn">
           <i data-lucide="log-in" style="width: 14px; height: 14px;"></i> Login as Admin
         </button>
       </div>
     `;
+    const loginBtn = document.getElementById('restrictedStateLoginBtn');
+    if (loginBtn && callbacks.onOpenLoginModal) {
+      loginBtn.onclick = callbacks.onOpenLoginModal;
+    }
     if (window.lucide) lucide.createIcons({ targets: [cardsContainer] });
   }
 }
 
 // Render Top Visual Summary Banner for Bag Inspector
-function renderBagSummaryBanner() {
+export function renderBagSummaryBanner() {
   const container = document.getElementById('inspectorSummaryBanner');
   if (!container) return;
 
-  let items = Array.isArray(currentBagData) ? currentBagData : (currentBagData ? [currentBagData] : []);
+  let items = Array.isArray(state.currentBagData) ? state.currentBagData : (state.currentBagData ? [state.currentBagData] : []);
 
   if (items.length === 0) {
     container.style.display = 'none';
@@ -249,7 +254,6 @@ function renderBagSummaryBanner() {
 
   container.style.display = 'flex';
 
-  // Extract metrics
   const streamers = new Set();
   const gameKinds = new Set();
   let failedCount = 0;
@@ -298,7 +302,7 @@ function renderBagSummaryBanner() {
     `;
   }
 
-  if (isCurrentBagRedacted) {
+  if (state.isCurrentBagRedacted) {
     html += `
       <div class="summary-stat-pill warning">
         <i data-lucide="eye-off" style="color: #fda4af;"></i>
@@ -312,12 +316,12 @@ function renderBagSummaryBanner() {
 }
 
 // Render Bag Content according to View Mode & Filter Search
-function renderBagContent() {
+export function renderBagContent() {
   const searchTerm = (document.getElementById('bagSearchInput')?.value || '').toLowerCase();
   const cardsContainer = document.getElementById('cardsViewContainer');
   const jsonContainer = document.getElementById('jsonViewContainer');
 
-  if (currentBagViewMode === 'json') {
+  if (state.currentBagViewMode === 'json') {
     cardsContainer.style.display = 'none';
     jsonContainer.style.display = 'block';
     return;
@@ -326,7 +330,7 @@ function renderBagContent() {
   cardsContainer.style.display = 'grid';
   jsonContainer.style.display = 'none';
 
-  let itemsToRender = currentBagData;
+  let itemsToRender = state.currentBagData;
   if (!Array.isArray(itemsToRender)) {
     itemsToRender = itemsToRender ? [itemsToRender] : [];
   }
@@ -351,29 +355,26 @@ function renderBagContent() {
   if (window.lucide) lucide.createIcons({ targets: [cardsContainer] });
 }
 
-// Smart Visual Card Renderer per domain type (ClipInfo, MontageItem, etc.)
-function renderVisualItemCard(item, idx) {
+// Smart Visual Card Renderer per domain type
+export function renderVisualItemCard(item, idx) {
   if (!item || typeof item !== 'object') {
     return `<div class="item-card"><div class="item-value">${escapeHtml(String(item))}</div></div>`;
   }
 
-  // Detect ClipInfo model (has Link, Description, Start, End)
   if (item.Link || (item.Start && item.End)) {
     return renderClipInfoCard(item, idx);
   }
 
-  // Detect MontageItem model (has MontageId, Clips, FinalVideoPath)
   if (item.MontageId || item.Clips) {
     return renderMontageItemCard(item, idx);
   }
 
-  // Fallback: Clean generic card
   const jsonStr = escapeJsString(JSON.stringify(item));
   return `
     <div class="item-card">
       <div class="item-card-header">
         <span class="item-badge primary">Record #${idx + 1}</span>
-        <button class="icon-btn-small" onclick="copyToClipboard('${jsonStr}', 'Item JSON')" title="Copy Item JSON">
+        <button class="icon-btn-small" onclick="window.copyToClipboard('${jsonStr}', 'Item JSON')" title="Copy Item JSON">
           <i data-lucide="copy" style="width: 13px; height: 13px;"></i>
         </button>
       </div>
@@ -385,11 +386,11 @@ function renderVisualItemCard(item, idx) {
 }
 
 // Specialized Visual Card for Twitch Clips (ClipInfo)
-function renderClipInfoCard(item, idx) {
+export function renderClipInfoCard(item, idx) {
   const desc = typeof item.Description === 'string' ? item.Description : (item.Description ? String(item.Description) : '');
   const streamer = desc || 'Unknown Streamer';
   const isFailed = desc.includes('FAILED');
-  const isTemp = currentSelectedBag === 'bag_download_temp.json';
+  const isTemp = state.currentSelectedBag === 'bag_download_temp.json';
 
   const kindKeyStr = typeof item.KindKey === 'string' ? item.KindKey : (item.KindKey ? String(item.KindKey) : '');
   const gameTag = (kindKeyStr && kindKeyStr !== '***SENSITIVE_DATA_REDACTED***') ? kindKeyStr.toUpperCase() : 'GAME';
@@ -432,7 +433,7 @@ function renderClipInfoCard(item, idx) {
             <a href="${escapeHtml(linkStr)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="flex: 1; justify-content: center; text-decoration: none;">
               <i data-lucide="external-link" style="width: 14px; height: 14px;"></i> Watch Twitch Clip
             </a>
-            <button class="btn btn-secondary btn-sm" onclick="copyToClipboard('${escapeHtml(linkStr)}', 'Clip Link')" title="Copy URL">
+            <button class="btn btn-secondary btn-sm" onclick="window.copyToClipboard('${escapeHtml(linkStr)}', 'Clip Link')" title="Copy URL">
               <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
             </button>
           </div>
@@ -448,8 +449,8 @@ function renderClipInfoCard(item, idx) {
   `;
 }
 
-// Specialized Visual Card for Montage Packages (MontageItem)
-function renderMontageItemCard(item, idx) {
+// Specialized Visual Card for Montage Packages
+export function renderMontageItemCard(item, idx) {
   const title = item.GeneratedTitle || item.MontageId || `Montage #${idx + 1}`;
   const clipsCount = Array.isArray(item.Clips) ? item.Clips.length : 0;
   const isDone = item.Completed === true;
@@ -489,7 +490,7 @@ function renderMontageItemCard(item, idx) {
 }
 
 // Render key-value pairs for non-specialized cards
-function renderItemFields(obj) {
+export function renderItemFields(obj) {
   if (typeof obj !== 'object' || obj === null) {
     return `<div class="item-value">${escapeHtml(String(obj))}</div>`;
   }
@@ -513,7 +514,7 @@ function renderItemFields(obj) {
 }
 
 // Human Readable Stage Information for System Data Bags
-function getBagStageInfo(name) {
+export function getBagStageInfo(name) {
   if (name.includes('download_temp')) return { title: 'Staging Download', shortTitle: 'Staging', emoji: '📥', icon: 'download-cloud', color: 'var(--accent-cyan)' };
   if (name.includes('download')) return { title: 'Download Queue', shortTitle: 'Download', emoji: '📥', icon: 'download', color: 'var(--accent-cyan)' };
   if (name.includes('trimmed')) return { title: 'Trimmed Clips', shortTitle: 'Trimmed', emoji: '✂️', icon: 'scissors', color: 'var(--primary)' };
@@ -527,7 +528,7 @@ function getBagStageInfo(name) {
 }
 
 // Render Bags Overview Grid
-function renderBagsOverviewGrid(bags) {
+export function renderBagsOverviewGrid(bags) {
   const container = document.getElementById('bagsOverviewGrid');
   if (!container || !bags) return;
 
@@ -548,7 +549,7 @@ function renderBagsOverviewGrid(bags) {
           <div>Modified: <strong>${formatDate(bag.lastModified)}</strong></div>
         </div>
         <div style="margin-top: auto; display: flex; justify-content: flex-end;">
-          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="openBagInExplorer('${bag.fileName}')">
+          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="window.openBagInExplorer('${bag.fileName}')">
             <i data-lucide="eye"></i> Inspect Items
           </button>
         </div>
@@ -560,19 +561,18 @@ function renderBagsOverviewGrid(bags) {
 }
 
 // Render Bags Sidebar List and Mobile Ribbon
-function renderBagsSidebarList(bags) {
+export function renderBagsSidebarList(bags) {
   const sidebarContainer = document.getElementById('bagsSidebarList');
   const ribbonContainer = document.getElementById('mobileBagsRibbon');
 
   if (!bags) return;
 
-  // 1. Desktop Sidebar List
   if (sidebarContainer) {
     sidebarContainer.innerHTML = bags.map(bag => {
       const info = getBagStageInfo(bag.fileName);
       const isFailed = bag.fileName.includes('failed') && bag.itemCount > 0;
       return `
-        <button class="bag-item-btn ${bag.fileName === currentSelectedBag ? 'active' : ''} ${isFailed ? 'has-failures' : ''}" data-filename="${bag.fileName}" onclick="loadSelectedBag('${bag.fileName}')">
+        <button class="bag-item-btn ${bag.fileName === state.currentSelectedBag ? 'active' : ''} ${isFailed ? 'has-failures' : ''}" data-filename="${bag.fileName}" onclick="window.loadSelectedBag('${bag.fileName}')">
           <span class="bag-item-name">
             <i data-lucide="${info.icon}" style="width: 16px; height: 16px; color: ${info.color};"></i>
             <span style="font-weight: 600;">${info.title}</span>
@@ -584,13 +584,12 @@ function renderBagsSidebarList(bags) {
     if (window.lucide) lucide.createIcons({ targets: [sidebarContainer] });
   }
 
-  // 2. Mobile Ribbon Quick Badges
   if (ribbonContainer) {
     ribbonContainer.innerHTML = bags.map(bag => {
       const info = getBagStageInfo(bag.fileName);
       const isFailed = bag.fileName.includes('failed') && bag.itemCount > 0;
       return `
-        <button class="mobile-bag-pill ${bag.fileName === currentSelectedBag ? 'active' : ''} ${isFailed ? 'pill-failed-alert' : ''}" data-filename="${bag.fileName}" onclick="loadSelectedBag('${bag.fileName}')">
+        <button class="mobile-bag-pill ${bag.fileName === state.currentSelectedBag ? 'active' : ''} ${isFailed ? 'pill-failed-alert' : ''}" data-filename="${bag.fileName}" onclick="window.loadSelectedBag('${bag.fileName}')">
           <i data-lucide="${info.icon}" style="width: 13px; height: 13px; color: ${info.color};"></i>
           <span>${info.shortTitle}</span>
           <span class="pill-count ${isFailed ? 'count-danger' : ''}">${bag.itemCount}</span>
@@ -599,13 +598,4 @@ function renderBagsSidebarList(bags) {
     }).join('');
     if (window.lucide) lucide.createIcons({ targets: [ribbonContainer] });
   }
-}
-
-// Helper icons and colors per bag
-function getBagIcon(name) {
-  return getBagStageInfo(name).icon;
-}
-
-function getBagColor(name) {
-  return getBagStageInfo(name).color;
 }
