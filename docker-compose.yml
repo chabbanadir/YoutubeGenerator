@@ -9,6 +9,7 @@ services:
       - "8080:8080"
     volumes:
       - ./workspace:/app/workspace:rw
+      - ./wwwroot:/app/wwwroot:rw
       - ./appsettings.production.json:/app/appsettings.Production.json:ro  # optional override
     environment:
       # .NET environment

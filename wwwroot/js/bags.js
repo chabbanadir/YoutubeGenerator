@@ -126,9 +126,10 @@ function openBagInExplorer(bagFileName) {
 async function loadSelectedBag(bagFileName) {
   currentSelectedBag = bagFileName;
   
-  // Highlight active sidebar item
-  document.querySelectorAll('.bag-item-btn').forEach(btn => {
-    const isTarget = btn.innerText.includes(bagFileName);
+  // Highlight active sidebar item and mobile ribbon pill
+  document.querySelectorAll('.bag-item-btn, .mobile-bag-pill').forEach(btn => {
+    const fn = btn.getAttribute('data-filename');
+    const isTarget = fn ? fn === bagFileName : btn.innerText.includes(bagFileName);
     btn.classList.toggle('active', isTarget);
   });
 
@@ -137,7 +138,14 @@ async function loadSelectedBag(bagFileName) {
   const editBtn = document.getElementById('btnEditBag');
 
   if (titleEl) {
-    titleEl.innerHTML = `<i data-lucide="${getBagIcon(bagFileName)}" style="color: ${getBagColor(bagFileName)};"></i> ${bagFileName}`;
+    const stageInfo = typeof getBagStageInfo === 'function' ? getBagStageInfo(bagFileName) : { title: bagFileName, icon: getBagIcon(bagFileName), color: getBagColor(bagFileName) };
+    titleEl.innerHTML = `
+      <div class="selected-stage-header">
+        <i data-lucide="${stageInfo.icon}" style="color: ${stageInfo.color}; width: 16px; height: 16px;"></i>
+        <span class="stage-title-text">${stageInfo.title}</span>
+        <span class="code-filename-badge">${bagFileName}</span>
+      </div>
+    `;
     if (window.lucide) lucide.createIcons({ targets: [titleEl] });
   }
 
@@ -504,72 +512,100 @@ function renderItemFields(obj) {
   }).join('');
 }
 
-// Render Bags Grid on Overview Tab
+// Human Readable Stage Information for System Data Bags
+function getBagStageInfo(name) {
+  if (name.includes('download_temp')) return { title: 'Staging Download', shortTitle: 'Staging', emoji: '📥', icon: 'download-cloud', color: 'var(--accent-cyan)' };
+  if (name.includes('download')) return { title: 'Download Queue', shortTitle: 'Download', emoji: '📥', icon: 'download', color: 'var(--accent-cyan)' };
+  if (name.includes('trimmed')) return { title: 'Trimmed Clips', shortTitle: 'Trimmed', emoji: '✂️', icon: 'scissors', color: 'var(--primary)' };
+  if (name.includes('montage')) return { title: 'Montage Packages', shortTitle: 'Montage', emoji: '🎬', icon: 'film', color: 'var(--accent-amber)' };
+  if (name.includes('youtube_done')) return { title: 'Published Videos', shortTitle: 'Published', emoji: '✅', icon: 'check-circle-2', color: 'var(--accent-emerald)' };
+  if (name.includes('youtube')) return { title: 'Ready for Upload', shortTitle: 'Upload', emoji: '🚀', icon: 'youtube', color: '#a855f7' };
+  if (name.includes('failed')) return { title: 'Failed Items', shortTitle: 'Failed', emoji: '⚠️', icon: 'alert-triangle', color: 'var(--accent-rose)' };
+  if (name.includes('history')) return { title: 'System History', shortTitle: 'History', emoji: '📜', icon: 'history', color: 'var(--text-muted)' };
+  if (name.includes('worker')) return { title: 'Worker State', shortTitle: 'Worker', emoji: '⚙️', icon: 'cpu', color: 'var(--accent-amber)' };
+  return { title: name, shortTitle: name, emoji: '📄', icon: 'file-json', color: 'var(--text-muted)' };
+}
+
+// Render Bags Overview Grid
 function renderBagsOverviewGrid(bags) {
   const container = document.getElementById('bagsOverviewGrid');
   if (!container || !bags) return;
 
-  container.innerHTML = bags.map(bag => `
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">
-          <i data-lucide="${getBagIcon(bag.fileName)}" style="color: ${getBagColor(bag.fileName)};"></i>
-          ${bag.fileName}
+  container.innerHTML = bags.map(bag => {
+    const info = getBagStageInfo(bag.fileName);
+    return `
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <i data-lucide="${info.icon}" style="color: ${info.color};"></i>
+            ${info.title}
+          </div>
+          <span class="card-count ${bag.fileName.includes('failed') && bag.itemCount > 0 ? 'count-failed-badge' : ''}">${bag.itemCount} items</span>
         </div>
-        <span class="card-count">${bag.itemCount} items</span>
+        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          <div>Filename: <strong style="font-family: var(--font-mono); font-size: 0.8rem;">${bag.fileName}</strong></div>
+          <div>Size: <strong>${formatFileSize(bag.sizeBytes)}</strong></div>
+          <div>Modified: <strong>${formatDate(bag.lastModified)}</strong></div>
+        </div>
+        <div style="margin-top: auto; display: flex; justify-content: flex-end;">
+          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="openBagInExplorer('${bag.fileName}')">
+            <i data-lucide="eye"></i> Inspect Items
+          </button>
+        </div>
       </div>
-      <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-        <div>Size: <strong>${formatFileSize(bag.sizeBytes)}</strong></div>
-        <div>Modified: <strong>${formatDate(bag.lastModified)}</strong></div>
-      </div>
-      <div style="margin-top: auto; display: flex; justify-content: flex-end;">
-        <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="openBagInExplorer('${bag.fileName}')">
-          <i data-lucide="eye"></i> Inspect Items
-        </button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   if (window.lucide) lucide.createIcons({ targets: [container] });
 }
 
-// Render Bags Sidebar List
+// Render Bags Sidebar List and Mobile Ribbon
 function renderBagsSidebarList(bags) {
-  const container = document.getElementById('bagsSidebarList');
-  if (!container || !bags) return;
+  const sidebarContainer = document.getElementById('bagsSidebarList');
+  const ribbonContainer = document.getElementById('mobileBagsRibbon');
 
-  container.innerHTML = bags.map(bag => `
-    <button class="bag-item-btn ${bag.fileName === currentSelectedBag ? 'active' : ''}" onclick="loadSelectedBag('${bag.fileName}')">
-      <span class="bag-item-name">
-        <i data-lucide="${getBagIcon(bag.fileName)}" style="width: 16px; height: 16px; color: ${getBagColor(bag.fileName)};"></i>
-        ${bag.fileName}
-      </span>
-      <span style="font-size: 0.75rem; opacity: 0.8;">${bag.itemCount}</span>
-    </button>
-  `).join('');
+  if (!bags) return;
 
-  if (window.lucide) lucide.createIcons({ targets: [container] });
+  // 1. Desktop Sidebar List
+  if (sidebarContainer) {
+    sidebarContainer.innerHTML = bags.map(bag => {
+      const info = getBagStageInfo(bag.fileName);
+      const isFailed = bag.fileName.includes('failed') && bag.itemCount > 0;
+      return `
+        <button class="bag-item-btn ${bag.fileName === currentSelectedBag ? 'active' : ''} ${isFailed ? 'has-failures' : ''}" data-filename="${bag.fileName}" onclick="loadSelectedBag('${bag.fileName}')">
+          <span class="bag-item-name">
+            <i data-lucide="${info.icon}" style="width: 16px; height: 16px; color: ${info.color};"></i>
+            <span style="font-weight: 600;">${info.title}</span>
+          </span>
+          <span class="bag-count-pill ${isFailed ? 'pill-danger' : ''}">${bag.itemCount}</span>
+        </button>
+      `;
+    }).join('');
+    if (window.lucide) lucide.createIcons({ targets: [sidebarContainer] });
+  }
+
+  // 2. Mobile Ribbon Quick Badges
+  if (ribbonContainer) {
+    ribbonContainer.innerHTML = bags.map(bag => {
+      const info = getBagStageInfo(bag.fileName);
+      const isFailed = bag.fileName.includes('failed') && bag.itemCount > 0;
+      return `
+        <button class="mobile-bag-pill ${bag.fileName === currentSelectedBag ? 'active' : ''} ${isFailed ? 'pill-failed-alert' : ''}" data-filename="${bag.fileName}" onclick="loadSelectedBag('${bag.fileName}')">
+          <i data-lucide="${info.icon}" style="width: 13px; height: 13px; color: ${info.color};"></i>
+          <span>${info.shortTitle}</span>
+          <span class="pill-count ${isFailed ? 'count-danger' : ''}">${bag.itemCount}</span>
+        </button>
+      `;
+    }).join('');
+    if (window.lucide) lucide.createIcons({ targets: [ribbonContainer] });
+  }
 }
 
 // Helper icons and colors per bag
 function getBagIcon(name) {
-  if (name.includes('download')) return 'download';
-  if (name.includes('trimmed')) return 'scissors';
-  if (name.includes('montage')) return 'film';
-  if (name.includes('youtube_done')) return 'check-circle-2';
-  if (name.includes('youtube')) return 'youtube';
-  if (name.includes('failed')) return 'alert-circle';
-  if (name.includes('history')) return 'history';
-  if (name.includes('worker')) return 'cpu';
-  return 'file-json';
+  return getBagStageInfo(name).icon;
 }
 
 function getBagColor(name) {
-  if (name.includes('download')) return 'var(--accent-cyan)';
-  if (name.includes('trimmed')) return 'var(--primary)';
-  if (name.includes('montage')) return 'var(--accent-amber)';
-  if (name.includes('youtube_done')) return 'var(--accent-emerald)';
-  if (name.includes('youtube')) return '#a855f7';
-  if (name.includes('failed')) return 'var(--accent-rose)';
-  return 'var(--text-muted)';
+  return getBagStageInfo(name).color;
 }

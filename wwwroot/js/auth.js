@@ -58,7 +58,7 @@ function updateAuthUI(status) {
       pill.style.borderColor = 'rgba(99, 102, 241, 0.4)';
       pill.style.color = '#a5b4fc';
     }
-    if (text) text.innerText = 'Public View (Read-Only)';
+    if (text) text.innerHTML = 'Public View<span class="desktop-only-inline"> (Read-Only)</span>';
     if (loginBtn) loginBtn.style.display = 'inline-flex';
     if (logoutBtn) logoutBtn.style.display = 'none';
     if (editBagBtn) editBagBtn.style.display = 'none';

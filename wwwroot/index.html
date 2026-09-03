@@ -11,7 +11,7 @@
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/dashboard.css?v=6">
 </head>
 <body>
 
@@ -42,26 +42,28 @@
         <!-- Auth Status Pill -->
         <div class="pill auth-guest" id="authStatusPill" title="Authentication Security Layer">
           <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
-          <span id="authStatusText">Public View (Read-Only)</span>
+          <span id="authStatusText">Public View<span class="desktop-only-inline"> (Read-Only)</span></span>
         </div>
       </div>
 
-      <!-- Auth Action Buttons -->
-      <button class="btn btn-primary" id="loginModalBtn" onclick="openLoginModal()" title="Admin Login">
-        <i data-lucide="log-in" style="width: 14px; height: 14px;"></i>
-        <span>Login</span>
-      </button>
+      <!-- Auth & Action Buttons Group -->
+      <div class="header-btns-group">
+        <button class="btn btn-primary" id="loginModalBtn" onclick="openLoginModal()" title="Admin Login">
+          <i data-lucide="log-in" style="width: 14px; height: 14px;"></i>
+          <span class="btn-text">Login</span>
+        </button>
 
-      <button class="btn btn-secondary" id="logoutBtn" onclick="handleLogout()" style="display: none;" title="Logout Admin Session">
-        <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
-        <span>Logout</span>
-      </button>
+        <button class="btn btn-secondary" id="logoutBtn" onclick="handleLogout()" style="display: none;" title="Logout Admin Session">
+          <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
+          <span class="btn-text">Logout</span>
+        </button>
 
-      <!-- Refresh Button -->
-      <button class="btn btn-secondary" id="refreshBtn" onclick="fetchDashboardOverview(true)" title="Refresh Dashboard Data">
-        <i data-lucide="refresh-cw" class="spin-icon" id="refreshIcon"></i>
-        <span>Refresh</span>
-      </button>
+        <!-- Refresh Button -->
+        <button class="btn btn-secondary" id="refreshBtn" onclick="fetchDashboardOverview(true)" title="Refresh Dashboard Data">
+          <i data-lucide="refresh-cw" class="spin-icon" id="refreshIcon"></i>
+          <span class="btn-text">Refresh</span>
+        </button>
+      </div>
     </div>
   </nav>
 
@@ -71,13 +73,13 @@
       <!-- Navigation Tabs -->
       <div class="tabs-nav">
         <button class="tab-btn active" id="tab-btn-overview" onclick="switchTab('overview')">
-          <i data-lucide="layout-dashboard"></i> Pipeline Overview
+          <i data-lucide="layout-dashboard"></i> Overview<span class="desktop-only-inline"> Pipeline</span>
         </button>
         <button class="tab-btn" id="tab-btn-bags" onclick="switchTab('bags')">
-          <i data-lucide="folder-kanban"></i> Bags Content Inspector
+          <i data-lucide="folder-kanban"></i> Bags<span class="desktop-only-inline"> Inspector</span>
         </button>
         <button class="tab-btn" id="tab-btn-profiles" onclick="switchTab('profiles')" style="display: none;">
-          <i data-lucide="sliders"></i> Profiles Manager
+          <i data-lucide="sliders"></i> Profiles<span class="desktop-only-inline"> Manager</span>
         </button>
       </div>
 
@@ -139,8 +141,8 @@
       <!-- TAB 2: BAGS CONTENT INSPECTOR -->
       <div id="tab-bags" class="tab-view">
         <div class="explorer-layout">
-          <!-- Left Bags List Sidebar -->
-          <div class="card" style="padding: 1rem;">
+          <!-- Left Bags List Sidebar (Desktop) -->
+          <div class="card bags-sidebar-card" id="bagsSidebarCard" style="padding: 1rem;">
             <div class="card-title" style="margin-bottom: 1rem; font-size: 0.95rem;">
               <i data-lucide="files"></i> Available Bags
             </div>
@@ -150,10 +152,18 @@
           </div>
 
           <!-- Main Content Inspector -->
-          <div class="card" style="gap: 1rem;">
+          <div class="card main-inspector-card" style="gap: 1rem;">
+            <!-- Mobile Bag Selector Container (Stage Ribbon) -->
+            <div class="mobile-bags-selector-container" id="mobileBagsSelectorContainer">
+              <!-- Quick Mobile Stage Ribbon Badges -->
+              <div class="mobile-bags-ribbon" id="mobileBagsRibbon">
+                <!-- Dynamic Mobile Bag Pills populated via JS -->
+              </div>
+            </div>
+
             <!-- Inspector Toolbar -->
             <div class="editor-toolbar">
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div class="toolbar-left">
                 <h3 class="card-title" id="selectedBagTitle">
                   <i data-lucide="file-json" style="color: var(--accent-amber);"></i> bag_download.json
                 </h3>
@@ -163,30 +173,30 @@
                 </span>
               </div>
 
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div class="toolbar-right">
                 <!-- Edit Bag Button (Admin Only) -->
-                <button class="btn btn-primary" id="btnEditBag" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; display: none;" onclick="openEditBagModal()" title="Edit and Save Bag Content">
-                  <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i> Edit Bag
+                <button class="btn btn-primary btn-sm" id="btnEditBag" style="display: none;" onclick="openEditBagModal()" title="Edit and Save Bag Content">
+                  <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i> <span class="btn-text">Edit Bag</span>
                 </button>
 
                 <!-- Copy JSON Button -->
-                <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="copyToClipboard(currentRawJson, 'Bag JSON')" title="Copy Entire Bag JSON">
-                  <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Copy JSON
+                <button class="btn btn-secondary btn-sm" onclick="copyToClipboard(currentRawJson, 'Bag JSON')" title="Copy Entire Bag JSON">
+                  <i data-lucide="copy" style="width: 14px; height: 14px;"></i> <span class="btn-text">Copy JSON</span>
                 </button>
 
                 <!-- Filter Search -->
-                <div style="position: relative;">
-                  <input type="text" id="bagSearchInput" placeholder="Search items..." oninput="renderBagContent()" style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: white; padding: 0.4rem 0.8rem 0.4rem 2rem; border-radius: 6px; font-size: 0.85rem; outline: none; width: 190px;">
-                  <i data-lucide="search" style="position: absolute; left: 8px; top: 7px; width: 14px; height: 14px; color: var(--text-muted);"></i>
+                <div class="bag-search-wrap">
+                  <input type="text" id="bagSearchInput" placeholder="Search items..." oninput="renderBagContent()">
+                  <i data-lucide="search" class="search-icon"></i>
                 </div>
 
                 <!-- View Mode Toggle -->
                 <div class="editor-mode-toggle">
                   <button class="mode-btn active" id="btnModeCards" onclick="setBagViewMode('cards')">
-                    <i data-lucide="grid" style="width: 14px; height: 14px; display: inline;"></i> Visual Cards
+                    <i data-lucide="grid" style="width: 14px; height: 14px; display: inline;"></i> <span class="mode-text">Cards</span>
                   </button>
                   <button class="mode-btn" id="btnModeJson" onclick="setBagViewMode('json')">
-                    <i data-lucide="code" style="width: 14px; height: 14px; display: inline;"></i> Raw JSON
+                    <i data-lucide="code" style="width: 14px; height: 14px; display: inline;"></i> <span class="mode-text">JSON</span>
                   </button>
                 </div>
               </div>
@@ -316,7 +326,7 @@
 
   <!-- Create Kind Modal -->
   <div class="modal-backdrop" id="createKindModal">
-    <div class="modal-card" style="max-width: 580px;">
+    <div class="modal-card compact-modal" style="max-width: 540px;">
       <div class="modal-header">
         <h3 class="modal-title" id="createKindModalTitle">
           <i data-lucide="plus-circle" style="color: var(--primary);"></i> Create New Game Kind Profile
@@ -326,46 +336,33 @@
         </button>
       </div>
       <form id="createKindForm" onsubmit="handleCreateKind(event)">
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label">Kind Key / Game Identifier <span style="color:#ef4444;">*</span></label>
-            <input type="text" class="form-input" id="newKindKey" required placeholder="e.g. fortnite, apex, gta5, CS2">
-            <small style="color: var(--text-muted); font-size: 0.75rem;">Will create <code>workspace/profiles/kinds/&lt;kindkey&gt;.json</code></small>
-          </div>
-
-          <div style="border-top: 1px solid var(--border); margin: 1rem 0; padding-top: 0.8rem;">
-            <label class="form-label" style="font-weight: 600; color: #ef4444; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem;">
-              <i data-lucide="youtube" style="width: 16px; height: 16px;"></i> YouTube Integration & OAuth Connector
-            </label>
-            
-            <div class="form-group" style="margin-bottom: 0.75rem;">
-              <label class="form-label">YouTube Channel ID (Optional)</label>
-              <input type="text" class="form-input" id="newKindChannelId" placeholder="e.g. UCuSLLufPm0w1LCgqjgWAZTw">
+        <div class="modal-body compact-modal-body">
+          <div class="form-row-2col">
+            <div class="form-group">
+              <label class="form-label">Kind Key / Game Identifier <span style="color:#ef4444;">*</span></label>
+              <input type="text" class="form-input" id="newKindKey" required placeholder="e.g. fortnite, apex, gta5">
             </div>
-
-            <div style="background: rgba(239, 68, 68, 0.08); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.2); display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;">
-              <div style="flex: 1;">
-                <div style="font-size: 0.82rem; font-weight: 600; color: #f8fafc; display: flex; align-items: center; gap: 0.35rem;">
-                  <i data-lucide="link" style="width: 13px; height: 13px; color: #ef4444;"></i> Instant OAuth Link
-                </div>
-                <div style="font-size: 0.74rem; color: #94a3b8; margin-top: 2px;">
-                  Authorize YouTube channel credentials via Google OAuth directly upon creation.
-                </div>
-              </div>
-              <button type="button" class="btn" id="createAndConnectBtn" onclick="handleCreateAndConnectKind(event)" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 0.45rem 0.85rem; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);">
-                <i data-lucide="youtube" style="width: 14px; height: 14px;"></i> Create & Connect
-              </button>
-            </div>
-          </div>
-
-          <div style="border-top: 1px solid var(--border); margin: 1rem 0; padding-top: 0.8rem;">
-            <label class="form-label" style="font-weight: 600; color: #a78bfa; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem;">
-              <i data-lucide="clock" style="width: 16px; height: 16px;"></i> Upload Automation Rules
-            </label>
-
             <div class="form-group">
               <label class="form-label">Min Delay (Hours)</label>
               <input type="number" class="form-input" id="newKindMinDelayHours" value="8" min="1">
+            </div>
+          </div>
+          <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: -0.4rem; margin-bottom: 0.6rem;">
+            Will create <code>workspace/profiles/kinds/&lt;kindkey&gt;.json</code>
+          </small>
+
+          <div class="oauth-mini-banner">
+            <div class="form-group" style="margin-bottom: 0.4rem;">
+              <label class="form-label" style="color: #ef4444; display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="youtube" style="width: 14px; height: 14px;"></i> YouTube Channel ID (Optional)
+              </label>
+              <input type="text" class="form-input" id="newKindChannelId" placeholder="e.g. UCuSLLufPm0w1LCgqjgWAZTw">
+            </div>
+            <div class="oauth-mini-actions">
+              <span class="oauth-mini-hint"><i data-lucide="link" style="width: 12px; height: 12px; color: #ef4444;"></i> Connect YouTube via Google OAuth</span>
+              <button type="button" class="btn btn-oauth-mini" id="createAndConnectBtn" onclick="handleCreateAndConnectKind(event)">
+                <i data-lucide="youtube" style="width: 13px; height: 13px;"></i> Create & Connect
+              </button>
             </div>
           </div>
 
@@ -381,7 +378,7 @@
 
   <!-- Create SubKind Modal -->
   <div class="modal-backdrop" id="createSubkindModal">
-    <div class="modal-card" style="max-width: 540px;">
+    <div class="modal-card compact-modal" style="max-width: 540px;">
       <div class="modal-header">
         <h3 class="modal-title" id="createSubkindModalTitle">
           <i data-lucide="plus-circle" style="color: var(--primary);"></i> Create New SubKind Profile
@@ -391,59 +388,57 @@
         </button>
       </div>
       <form id="createSubkindForm" onsubmit="handleCreateSubkind(event)">
-        <div class="modal-body">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <div class="modal-body compact-modal-body">
+          <div class="form-row-2col">
             <div class="form-group">
               <label class="form-label">Game / Kind Key <span style="color:#ef4444;">*</span></label>
               <select class="form-input" id="newSubkindKindKey" required style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
-                <option value="" style="background-color: #1e293b; color: #94a3b8;">Select a Game Kind...</option>
+                <option value="" style="background-color: #1e293b; color: #94a3b8;">Select Kind...</option>
               </select>
             </div>
             <div class="form-group">
               <label class="form-label">SubKind Key <span style="color:#ef4444;">*</span></label>
-              <input type="text" class="form-input" id="newSubkindSubKindKey" required placeholder="e.g. pentas, aces, normal">
+              <input type="text" class="form-input" id="newSubkindSubKindKey" required placeholder="e.g. pentas, aces">
             </div>
           </div>
-          <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: -0.2rem; margin-bottom: 0.8rem;">
-            Will create <code>workspace/profiles/subkinds/&lt;kind&gt;_&lt;subkind&gt;.json</code>
-          </small>
 
-          <div class="form-group">
-            <label class="form-label">Intro Video Asset File Path</label>
-            <select class="form-input" id="newSubkindIntroFile" style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
-              <option value="" style="background-color: #1e293b; color: #94a3b8;">None / Select Intro Video...</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">FFmpeg Transition Effect</label>
-            <select class="form-input" id="newSubkindTransitionAnimation" style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
-              <option value="fade" style="background-color: #1e293b; color: #f8fafc;">Fade</option>
-              <option value="dissolve" style="background-color: #1e293b; color: #f8fafc;">Dissolve</option>
-              <option value="pixelize" style="background-color: #1e293b; color: #f8fafc;">Pixelize</option>
-              <option value="fadeblack" style="background-color: #1e293b; color: #f8fafc;">Fade Black</option>
-              <option value="fadewhite" style="background-color: #1e293b; color: #f8fafc;">Fade White</option>
-              <option value="wipeleft" style="background-color: #1e293b; color: #f8fafc;">Wipe Left</option>
-              <option value="wiperight" style="background-color: #1e293b; color: #f8fafc;">Wipe Right</option>
-              <option value="wipeup" style="background-color: #1e293b; color: #f8fafc;">Wipe Up</option>
-              <option value="wipedown" style="background-color: #1e293b; color: #f8fafc;">Wipe Down</option>
-              <option value="slideleft" style="background-color: #1e293b; color: #f8fafc;">Slide Left</option>
-              <option value="slideright" style="background-color: #1e293b; color: #f8fafc;">Slide Right</option>
-              <option value="slideup" style="background-color: #1e293b; color: #f8fafc;">Slide Up</option>
-              <option value="slidedown" style="background-color: #1e293b; color: #f8fafc;">Slide Down</option>
-              <option value="circlecrop" style="background-color: #1e293b; color: #f8fafc;">Circle Crop</option>
-              <option value="rectcrop" style="background-color: #1e293b; color: #f8fafc;">Rect Crop</option>
-              <option value="distance" style="background-color: #1e293b; color: #f8fafc;">Distance</option>
-            </select>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-row-2col">
             <div class="form-group">
-              <label class="form-label">Transition Duration (Sec)</label>
+              <label class="form-label">Intro Video Asset</label>
+              <select class="form-input" id="newSubkindIntroFile" style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
+                <option value="" style="background-color: #1e293b; color: #94a3b8;">None / Select...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Transition Effect</label>
+              <select class="form-input" id="newSubkindTransitionAnimation" style="background: #0f172a; color: #f8fafc; font-weight:600; color-scheme: dark;">
+                <option value="fade" style="background-color: #1e293b; color: #f8fafc;">Fade</option>
+                <option value="dissolve" style="background-color: #1e293b; color: #f8fafc;">Dissolve</option>
+                <option value="pixelize" style="background-color: #1e293b; color: #f8fafc;">Pixelize</option>
+                <option value="fadeblack" style="background-color: #1e293b; color: #f8fafc;">Fade Black</option>
+                <option value="fadewhite" style="background-color: #1e293b; color: #f8fafc;">Fade White</option>
+                <option value="wipeleft" style="background-color: #1e293b; color: #f8fafc;">Wipe Left</option>
+                <option value="wiperight" style="background-color: #1e293b; color: #f8fafc;">Wipe Right</option>
+                <option value="wipeup" style="background-color: #1e293b; color: #f8fafc;">Wipe Up</option>
+                <option value="wipedown" style="background-color: #1e293b; color: #f8fafc;">Wipe Down</option>
+                <option value="slideleft" style="background-color: #1e293b; color: #f8fafc;">Slide Left</option>
+                <option value="slideright" style="background-color: #1e293b; color: #f8fafc;">Slide Right</option>
+                <option value="slideup" style="background-color: #1e293b; color: #f8fafc;">Slide Up</option>
+                <option value="slidedown" style="background-color: #1e293b; color: #f8fafc;">Slide Down</option>
+                <option value="circlecrop" style="background-color: #1e293b; color: #f8fafc;">Circle Crop</option>
+                <option value="rectcrop" style="background-color: #1e293b; color: #f8fafc;">Rect Crop</option>
+                <option value="distance" style="background-color: #1e293b; color: #f8fafc;">Distance</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-2col">
+            <div class="form-group">
+              <label class="form-label">Transition Sec</label>
               <input type="number" class="form-input" id="newSubkindTransitionDuration" value="2" min="1" max="10">
             </div>
             <div class="form-group">
-              <label class="form-label">Min Target Montage (Min)</label>
+              <label class="form-label">Min Montage Min</label>
               <input type="number" class="form-input" id="newSubkindMinMontageMinutes" value="10" min="1">
             </div>
           </div>
@@ -490,12 +485,12 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Dashboard JavaScript Modules -->
-  <script src="js/api.js?v=3"></script>
-  <script src="js/auth.js?v=3"></script>
-  <script src="js/bags.js?v=3"></script>
-  <script src="js/gameKinds.js?v=3"></script>
-  <script src="js/subKinds.js?v=3"></script>
-  <script src="js/profiles.js?v=3"></script>
-  <script src="js/dashboard.js?v=3"></script>
+  <script src="js/api.js?v=4"></script>
+  <script src="js/auth.js?v=4"></script>
+  <script src="js/bags.js?v=4"></script>
+  <script src="js/gameKinds.js?v=4"></script>
+  <script src="js/subKinds.js?v=4"></script>
+  <script src="js/profiles.js?v=4"></script>
+  <script src="js/dashboard.js?v=4"></script>
 </body>
 </html>
