@@ -3,12 +3,12 @@
 import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth } from './core/api.js';
 import { checkAuthStatus, openLoginModal, closeLoginModal, handleLogin, handleLogout } from './core/auth.js';
 import { 
-  fetchBagsOverview, 
-  selectBag, 
   loadSelectedBag, 
-  openJsonEditor, 
-  closeJsonEditorModal, 
-  saveJsonEditorContent, 
+  openBagInExplorer,
+  openEditBagModal,
+  handleSaveRawJsonInline,
+  formatRawJson,
+  resetRawJson,
   renderBagsOverviewGrid, 
   renderBagsSidebarList 
 } from './modules/bags.js';
@@ -112,7 +112,7 @@ export async function fetchDashboardOverview(showNotification = false) {
 
     // Default select first bag if none active
     if (!state.selectedBag && Array.isArray(data.bags) && data.bags.length > 0) {
-      selectBag(data.bags[0].fileName);
+      state.selectedBag = data.bags[0].fileName;
     }
 
     if (showNotification) {
@@ -157,11 +157,12 @@ window.openCreateSubKindModal = () => openCreateSubKindModal({ onOpenLoginModal:
 window.closeCreateSubKindModal = closeCreateSubKindModal;
 window.handleCreateSubKind = (e) => handleCreateSubKind(e, { onFetchProfiles: fetchProfiles });
 
-window.selectBag = selectBag;
-window.loadSelectedBag = loadSelectedBag;
-window.openJsonEditor = openJsonEditor;
-window.closeJsonEditorModal = closeJsonEditorModal;
-window.saveJsonEditorContent = saveJsonEditorContent;
+window.loadSelectedBag = (bagFileName) => loadSelectedBag(bagFileName, { onOpenLoginModal: openLoginModal, onOverviewRefresh: fetchDashboardOverview });
+window.openBagInExplorer = (bagFileName) => openBagInExplorer(bagFileName, { onSwitchTab: switchTab, onOpenLoginModal: openLoginModal });
+window.openEditBagModal = () => openEditBagModal({ onOpenLoginModal: openLoginModal });
+window.handleSaveRawJsonInline = () => handleSaveRawJsonInline({ onOverviewRefresh: fetchDashboardOverview });
+window.formatRawJson = formatRawJson;
+window.resetRawJson = resetRawJson;
 
 // Global ESC key & Backdrop Click listeners to close active modals
 document.addEventListener('keydown', (e) => {
@@ -170,7 +171,6 @@ document.addEventListener('keydown', (e) => {
     closeCreateKindModal();
     closeCreateSubKindModal();
     closeConfirmDeleteModal();
-    closeJsonEditorModal();
     document.querySelectorAll('.modal-backdrop.active').forEach(modal => {
       modal.classList.remove('active');
     });
@@ -183,7 +183,6 @@ document.addEventListener('click', (e) => {
     else if (e.target.id === 'createKindModal') closeCreateKindModal();
     else if (e.target.id === 'createSubKindModal') closeCreateSubKindModal();
     else if (e.target.id === 'confirmDeleteModal') closeConfirmDeleteModal();
-    else if (e.target.id === 'jsonEditorModal') closeJsonEditorModal();
     else e.target.classList.remove('active');
   }
 });

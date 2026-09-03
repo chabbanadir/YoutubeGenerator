@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -137,6 +137,23 @@ namespace YoutubeGenerator.workers
                     Directory.CreateDirectory(dirTrim);
 
                     string finalOutputPath = Path.Combine(dirMontage, $"{packageToRender.MontageId}.mp4");
+
+                    // Validate that clips exist on disk
+                    var validClips = packageToRender.Clips.Where(c => File.Exists(c.File)).ToList();
+                    if (validClips.Count < packageToRender.Clips.Count)
+                    {
+                        int missingCount = packageToRender.Clips.Count - validClips.Count;
+                        _logger.LogWarning($"⚠️ Package {packageToRender.MontageId} has {missingCount} missing clip file(s). Filtering out missing clips.");
+                        packageToRender.Clips = validClips;
+                    }
+
+                    if (packageToRender.Clips.Count == 0)
+                    {
+                        _logger.LogError($"❌ Package {packageToRender.MontageId} has no valid clips remaining on disk. Skipping rendering.");
+                        montageBag.Remove(packageToRender);
+                        JsonFileService.Save(_bagMontage, montageBag);
+                        continue;
+                    }
 
                     // Apply intro to first clip
                     string firstClipPath = packageToRender.Clips.First().File;
