@@ -1,5 +1,5 @@
 // Profiles Manager Module
-import { state, showToast, escapeJsString, fetchWithAuth } from '../core/api.js';
+import { state, showToast, escapeJsString, fetchWithAuth, getApiUrl } from '../core/api.js';
 import { renderKindsGrid } from './gameKinds.js';
 import { renderSubKindsGrid } from './subKinds.js';
 
@@ -14,7 +14,7 @@ export async function fetchProfiles() {
   if (containerSubKinds) containerSubKinds.innerHTML = '<div class="spinner">Loading SubKind profiles...</div>';
 
   try {
-    const res = await fetch('/api/dashboard/profiles');
+    const res = await fetch(getApiUrl('/api/dashboard/profiles'));
 
     if (res.ok) {
       const data = await res.json();

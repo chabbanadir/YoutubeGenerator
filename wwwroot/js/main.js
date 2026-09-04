@@ -66,7 +66,7 @@ export async function fetchDashboardOverview(showNotification = false) {
   if (refreshIcon) refreshIcon.classList.add('spin');
 
   try {
-    const res = await fetch('/api/dashboard/overview');
+    const res = await fetch(getApiUrl('/api/dashboard/overview'));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();

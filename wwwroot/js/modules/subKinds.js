@@ -1,5 +1,5 @@
 // SubKinds Profile Management Module
-import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth } from '../core/api.js';
+import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth, getApiUrl } from '../core/api.js';
 
 export function renderSubKindsGrid(subKinds, callbacks = {}) {
   const container = document.getElementById('subKindsGrid');
@@ -197,7 +197,7 @@ export async function openCreateSubKindModal(callbacks = {}) {
   const introSelect = document.getElementById('newSubkindIntroFile');
   if (introSelect) {
     try {
-      const res = await fetch('/api/dashboard/resources');
+      const res = await fetch(getApiUrl('/api/dashboard/resources'));
       if (res.ok) {
         const resources = await res.json();
         introSelect.innerHTML = '<option value="">None / Select...</option>' + 

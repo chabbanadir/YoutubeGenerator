@@ -12,13 +12,26 @@ export const state = {
   profilesData: { kinds: [], subkinds: [] }
 };
 
+// Helper to resolve API URLs relative to current location path (supports subpath proxying e.g. /youtube/)
+export function getApiUrl(url) {
+  if (!url) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  const cleanPath = url.startsWith('/') ? url.slice(1) : url;
+
+  let basePath = window.location.pathname;
+  if (!basePath.endsWith('/')) {
+    basePath = basePath.substring(0, basePath.lastIndexOf('/') + 1);
+  }
+  return window.location.origin + basePath + cleanPath;
+}
+
 // Helper for authenticated fetch requests
 export async function fetchWithAuth(url, options = {}) {
   const defaultOptions = {
     credentials: 'include'
   };
   const mergedOptions = { ...defaultOptions, ...options };
-  return fetch(url, mergedOptions);
+  return fetch(getApiUrl(url), mergedOptions);
 }
 
 // Toast Notification Helper

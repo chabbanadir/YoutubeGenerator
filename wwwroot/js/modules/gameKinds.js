@@ -1,5 +1,5 @@
 // Game Kinds Management Module
-import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth } from '../core/api.js';
+import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth, getApiUrl } from '../core/api.js';
 
 export function renderKindsGrid(kinds, callbacks = {}) {
   const container = document.getElementById('kindsGrid');
@@ -205,7 +205,7 @@ export async function saveKindCard(fileName) {
   const minDelayHours = minDelaySpan ? (parseInt(minDelaySpan.textContent, 10) || 8) : 8;
 
   try {
-    const res = await fetch(`/api/dashboard/profiles/kinds/${encodeURIComponent(fileName)}`, {
+    const res = await fetch(getApiUrl(`/api/dashboard/profiles/kinds/${encodeURIComponent(fileName)}`), {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
@@ -362,7 +362,7 @@ export async function handleCreateAndConnectKind(e, callbacks = {}) {
 
 export async function connectYoutubeChannel(kindKey) {
   try {
-    const res = await fetch(`/api/youtube/auth-url?kind=${encodeURIComponent(kindKey)}`);
+    const res = await fetch(getApiUrl(`/api/youtube/auth-url?kind=${encodeURIComponent(kindKey)}`));
     const data = await res.json();
     if (!res.ok) {
       showToast(data.error || 'Failed to get YouTube OAuth authorization URL. Check server configuration.', 'error');

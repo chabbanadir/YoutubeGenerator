@@ -1,5 +1,5 @@
 // Pipeline Bags Explorer & Raw JSON Editing Module
-import { state, showToast, escapeHtml, escapeJsString, formatFileSize, formatDate } from '../core/api.js';
+import { state, showToast, escapeHtml, escapeJsString, formatFileSize, formatDate, getApiUrl } from '../core/api.js';
 
 export function setBagViewMode(mode) {
   state.currentBagViewMode = mode;
@@ -61,7 +61,7 @@ export async function handleSaveRawJsonInline(callbacks = {}) {
   if (errorMsg) errorMsg.style.display = 'none';
 
   try {
-    const res = await fetch(`/api/dashboard/bags/${encodeURIComponent(state.currentSelectedBag)}`, {
+    const res = await fetch(getApiUrl(`/api/dashboard/bags/${encodeURIComponent(state.currentSelectedBag)}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(parsedObject)
@@ -151,7 +151,7 @@ export async function loadSelectedBag(bagFileName, callbacks = {}) {
   }
 
   try {
-    const res = await fetch(`/api/dashboard/bags/${encodeURIComponent(bagFileName)}`);
+    const res = await fetch(getApiUrl(`/api/dashboard/bags/${encodeURIComponent(bagFileName)}`));
     
     // Handle 403 Forbidden (Guest trying to read sensitive config/env files)
     if (res.status === 403) {

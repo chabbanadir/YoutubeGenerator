@@ -1,9 +1,9 @@
 // Core Authentication Module
-import { state, escapeHtml, showToast } from './api.js';
+import { state, escapeHtml, showToast, getApiUrl } from './api.js';
 
 export async function checkAuthStatus(callbacks = {}) {
   try {
-    const res = await fetch('/api/auth/status');
+    const res = await fetch(getApiUrl('/api/auth/status'));
     if (res.ok) {
       const status = await res.json();
       state.isAuthenticatedUser = status.isAuthenticated;
@@ -114,7 +114,7 @@ export async function handleLogin(e, callbacks = {}) {
   if (errorMsg) errorMsg.style.display = 'none';
 
   try {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(getApiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -149,7 +149,7 @@ export async function handleLogin(e, callbacks = {}) {
 
 export async function handleLogout(callbacks = {}) {
   try {
-    const res = await fetch('/api/auth/logout', { method: 'POST' });
+    const res = await fetch(getApiUrl('/api/auth/logout'), { method: 'POST' });
     if (res.ok) {
       showToast('Logged out successfully', 'info');
       await checkAuthStatus(callbacks);
