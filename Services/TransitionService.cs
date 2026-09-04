@@ -63,7 +63,7 @@ namespace YoutubeGenerator.Services
                 return true;
             }
 
-            const int maxBatchSize = 6;
+            const int maxBatchSize = 4;
             if (clips.Count <= maxBatchSize)
             {
                 return await MergeSingleBatchWithTransitionsAsync(clips, finalOutputPath, transitionType, transitionDuration, ct);
@@ -146,10 +146,10 @@ namespace YoutubeGenerator.Services
             // 3. Build single-pass filter complex script
             var sbFilter = new System.Text.StringBuilder();
 
-            // Video normalization (fps, scale, pad, pix_fmt, sar)
+            // Video normalization (fps, scale, pad, pix_fmt, sar, settb)
             for (int i = 0; i < clips.Count; i++)
             {
-                sbFilter.AppendLine($"[{i}:v]fps={_fps},scale={_width}:{_height}:force_original_aspect_ratio=decrease,pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p,setsar=1[v{i}];");
+                sbFilter.AppendLine($"[{i}:v]fps={_fps},scale={_width}:{_height}:force_original_aspect_ratio=decrease,pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p,setsar=1,settb=AVTB[v{i}];");
             }
 
             // Video xfade chain
@@ -196,8 +196,15 @@ namespace YoutubeGenerator.Services
 
                 sbArgs.Append($"-filter_complex_script \"{scriptPath}\" ");
                 sbArgs.Append("-map \"[vout]\" -map \"[aout]\" ");
-                sbArgs.Append("-c:v libx264 -preset superfast -crf 20 -pix_fmt yuv420p ");
+
+                bool isChunk = outputPath.Contains("chunk_");
+                string videoEncode = isChunk
+                    ? "-c:v libx264 -preset superfast -crf 14 -pix_fmt yuv420p"
+                    : "-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p";
+
+                sbArgs.Append($"{videoEncode} -threads 2 ");
                 sbArgs.Append("-c:a aac -b:a 192k -ar 48000 -ac 2 ");
+                sbArgs.Append("-vsync cfr ");
                 sbArgs.Append($"\"{outputPath}\"");
 
                 var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", sbArgs.ToString(), null, ct);

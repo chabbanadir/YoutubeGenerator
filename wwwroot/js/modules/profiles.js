@@ -14,20 +14,14 @@ export async function fetchProfiles() {
   if (containerSubKinds) containerSubKinds.innerHTML = '<div class="spinner">Loading SubKind profiles...</div>';
 
   try {
-    const [kindsRes, subKindsRes] = await Promise.all([
-      fetch('/api/dashboard/profiles/kinds'),
-      fetch('/api/dashboard/profiles/subkinds')
-    ]);
+    const res = await fetch('/api/dashboard/profiles');
 
-    if (kindsRes.ok) {
-      state.kinds = await kindsRes.json();
+    if (res.ok) {
+      const data = await res.json();
+      state.kinds = data.kinds || [];
+      state.subKinds = data.subkinds || [];
     } else {
       state.kinds = [];
-    }
-
-    if (subKindsRes.ok) {
-      state.subKinds = await subKindsRes.json();
-    } else {
       state.subKinds = [];
     }
 

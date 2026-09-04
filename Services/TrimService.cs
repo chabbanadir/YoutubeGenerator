@@ -115,10 +115,11 @@ namespace YoutubeGenerator.Services
                 $"file '{introPath.Replace("\\", "/")}'\n" +
                 $"file '{firstClipPath.Replace("\\", "/")}'\n");
 
-            // 2. Concat with video stream copy
+            // 2. Concat with video re-encode
             string args =
                 $"-y -f concat -safe 0 -i \"{concatListPath}\" " +
-                "-c:v copy -c:a aac -b:a 192k " +
+                "-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p " +
+                "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
                 $"\"{tempOutputPath}\"";
 
             var psi = new ProcessStartInfo
