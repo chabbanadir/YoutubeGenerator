@@ -27,6 +27,7 @@ import {
 import { 
   renderSubKindsGrid, 
   stepSubKindMinDelay, 
+  stepSubKindDuration,
   onSubKindCardModified, 
   saveSubKindCard, 
   openCreateSubKindModal, 
@@ -151,11 +152,18 @@ window.connectYoutubeChannel = connectYoutubeChannel;
 window.disconnectYoutubeChannel = (kindKey) => disconnectYoutubeChannel(kindKey, { onOpenLoginModal: openLoginModal, onFetchProfiles: fetchProfiles });
 
 window.saveSubKindCard = saveSubKindCard;
+window.saveSubkindCard = saveSubKindCard;
 window.onSubKindCardModified = onSubKindCardModified;
+window.onSubkindCardModified = onSubKindCardModified;
 window.stepSubKindMinDelay = stepSubKindMinDelay;
+window.stepSubKindDuration = stepSubKindDuration;
+window.stepSubkindDuration = stepSubKindDuration;
 window.openCreateSubKindModal = () => openCreateSubKindModal({ onOpenLoginModal: openLoginModal });
+window.openCreateSubkindModal = () => openCreateSubKindModal({ onOpenLoginModal: openLoginModal });
 window.closeCreateSubKindModal = closeCreateSubKindModal;
+window.closeCreateSubkindModal = closeCreateSubKindModal;
 window.handleCreateSubKind = (e) => handleCreateSubKind(e, { onFetchProfiles: fetchProfiles });
+window.handleCreateSubkind = (e) => handleCreateSubKind(e, { onFetchProfiles: fetchProfiles });
 
 window.loadSelectedBag = (bagFileName) => loadSelectedBag(bagFileName, { onOpenLoginModal: openLoginModal, onOverviewRefresh: fetchDashboardOverview });
 window.openBagInExplorer = (bagFileName) => openBagInExplorer(bagFileName, { onSwitchTab: switchTab, onOpenLoginModal: openLoginModal });

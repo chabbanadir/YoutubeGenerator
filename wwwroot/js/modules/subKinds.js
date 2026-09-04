@@ -115,6 +115,10 @@ export function stepSubKindMinDelay(fileName, delta) {
   stepSubKindDuration(fileName, delta);
 }
 
+export function stepSubkindDuration(fileName, delta) {
+  stepSubKindDuration(fileName, delta);
+}
+
 export function onSubKindCardModified(fileName) {
   const safeFileName = escapeJsString(fileName);
   const saveBtn = document.getElementById(`save-sk-btn-${safeFileName}`);
