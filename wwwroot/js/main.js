@@ -1,6 +1,6 @@
 // Main Application Orchestrator (ES6 Module Entry Point)
 
-import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth } from './core/api.js';
+import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth, getApiUrl } from './core/api.js';
 import { checkAuthStatus, openLoginModal, closeLoginModal, handleLogin, handleLogout } from './core/auth.js';
 import { 
   loadSelectedBag, 
