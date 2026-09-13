@@ -1,19 +1,17 @@
-/* Glass Cards & Badges */
+/* Glass Cards & Badges - VPS Alignment */
 .card {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 1.25rem;
-  box-shadow: var(--glass-shadow);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   transition: var(--transition);
   display: flex;
   flex-direction: column;
 }
 
 .card:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: #2e3d59;
 }
 
 .card-header {
@@ -269,7 +267,13 @@
   color: #fca5a5;
 }
 
-/* Profile Cards */
+/* Profile Cards - VPS Alignment */
+.profiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+}
+
 .profile-card {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
@@ -282,13 +286,13 @@
   position: relative;
   overflow: hidden;
   transition: all 0.25s ease;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .profile-card:hover {
   transform: translateY(-3px);
   border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 15px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.2);
 }
 
 .profile-card-header {

@@ -12,6 +12,7 @@ namespace YoutubeGenerator.Services
         private readonly ILogger<DashboardService> _logger;
         private readonly IOptions<CollectWorkerConfig> _cfg;
         private readonly string _bagsDir;
+        private readonly string _kindsDir;
 
         private static readonly HashSet<string> SensitiveFiles = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -40,7 +41,9 @@ namespace YoutubeGenerator.Services
 
             var rootPath = Path.Combine(_env.ContentRootPath, "workspace");
             _bagsDir = Path.Combine(rootPath, "bags");
+            _kindsDir = Path.Combine(rootPath, "profiles", "kinds");
             Directory.CreateDirectory(_bagsDir);
+            Directory.CreateDirectory(_kindsDir);
         }
 
         public object GetOverview(bool isAuthenticated)
@@ -52,6 +55,10 @@ namespace YoutubeGenerator.Services
             var workerMontageState = JsonFileService.Load<Worker2State>(workerMontageFile);
 
             var bagsInfo = GetBags(isAuthenticated);
+            var channels = GetChannelsOverview();
+            var recentPublished = GetRecentPublishedVideos(6);
+            var recentActivity = GetRecentActivity(8);
+            var kpis = GetOverviewKpis(channels, bagsInfo);
 
             return new
             {
@@ -60,6 +67,10 @@ namespace YoutubeGenerator.Services
                 readOnlyMode = !isAuthenticated,
                 currentUser = isAuthenticated ? "Admin" : null,
                 userRole = isAuthenticated ? "Admin" : "Guest",
+                kpis = kpis,
+                channels = channels,
+                recentPublished = recentPublished,
+                recentActivity = recentActivity,
                 workers = new
                 {
                     collectWorkerActive = workerCollectState.Status,
@@ -79,6 +90,287 @@ namespace YoutubeGenerator.Services
                     }
                 },
                 bags = bagsInfo
+            };
+        }
+
+        private List<object> GetChannelsOverview()
+        {
+            var channels = new List<object>();
+            if (!Directory.Exists(_kindsDir)) return channels;
+
+            foreach (var file in Directory.GetFiles(_kindsDir, "*.json").OrderBy(f => f))
+            {
+                try
+                {
+                    var content = File.ReadAllText(file);
+                    if (string.IsNullOrWhiteSpace(content)) continue;
+
+                    using var doc = JsonDocument.Parse(content);
+                    var root = doc.RootElement;
+                    var kindKey = Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
+                    if (root.TryGetProperty("KindKey", out var kProp) && !string.IsNullOrWhiteSpace(kProp.GetString()))
+                    {
+                        kindKey = kProp.GetString()!.ToLowerInvariant();
+                    }
+
+                    string channelId = "";
+                    if (root.TryGetProperty("YoutubeChannelId", out var cProp) && cProp.ValueKind == JsonValueKind.String)
+                    {
+                        channelId = cProp.GetString() ?? "";
+                    }
+
+                    string channelTitle = "";
+                    if (root.TryGetProperty("YoutubeChannelTitle", out var tProp) && tProp.ValueKind == JsonValueKind.String)
+                    {
+                        channelTitle = tProp.GetString() ?? "";
+                    }
+
+                    bool isConnected = false;
+                    if (root.TryGetProperty("YoutubeRefreshToken", out var rProp) && rProp.ValueKind == JsonValueKind.String)
+                    {
+                        var token = rProp.GetString();
+                        isConnected = !string.IsNullOrWhiteSpace(token) && !token.Contains("***");
+                    }
+
+                    bool enabled = false;
+                    int minDelayHours = 6;
+                    DateTime? lastUploadTime = null;
+                    int uploadCounter = 0;
+
+                    if (root.TryGetProperty("UploadConfig", out var uProp) && uProp.ValueKind == JsonValueKind.Object)
+                    {
+                        if (uProp.TryGetProperty("Enabled", out var eProp)) enabled = eProp.GetBoolean();
+                        if (uProp.TryGetProperty("MinDelayHours", out var mProp) && mProp.TryGetInt32(out var md)) minDelayHours = md;
+                        if (uProp.TryGetProperty("LastUploadTime", out var lProp) && lProp.TryGetDateTime(out var lu)) lastUploadTime = lu;
+                        if (uProp.TryGetProperty("UploadCounter", out var ucProp) && ucProp.TryGetInt32(out var uc)) uploadCounter = uc;
+                    }
+
+                    channels.Add(new
+                    {
+                        kindKey = kindKey,
+                        name = Path.GetFileNameWithoutExtension(file),
+                        channelId = channelId,
+                        channelTitle = channelTitle,
+                        isConnected = isConnected,
+                        enabled = enabled,
+                        minDelayHours = minDelayHours,
+                        lastUploadTime = lastUploadTime,
+                        uploadCounter = uploadCounter,
+                        youtubeUrl = !string.IsNullOrWhiteSpace(channelId) ? $"https://www.youtube.com/channel/{channelId}" : null
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Failed to parse kind profile '{file}' for overview");
+                }
+            }
+            return channels;
+        }
+
+        private List<object> GetRecentPublishedVideos(int limit = 6)
+        {
+            var list = new List<object>();
+            var doneFile = Path.Combine(_bagsDir, _cfg.Value.BagYoutubeDonePath ?? "bag_youtube_done.json");
+            if (!File.Exists(doneFile)) return list;
+
+            try
+            {
+                var items = JsonFileService.Load<List<MontageItem>>(doneFile);
+                if (items != null && items.Count > 0)
+                {
+                    var recent = items.AsEnumerable().Reverse().Take(limit);
+                    foreach (var item in recent)
+                    {
+                        var streamers = item.Clips?
+                            .Select(c => c.Description?.Trim())
+                            .Where(d => !string.IsNullOrWhiteSpace(d))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Take(5)
+                            .ToList() ?? new List<string?>();
+
+                        var durationStr = item.TotalDuration != TimeSpan.Zero 
+                            ? item.TotalDuration.ToString(@"hh\:mm\:ss").TrimStart('0', ':')
+                            : "";
+                        if (string.IsNullOrWhiteSpace(durationStr) || durationStr == "00") durationStr = "0:00";
+
+                        var montageId = item.MontageId ?? "";
+                        bool isRealYtId = !string.IsNullOrWhiteSpace(montageId) && !montageId.Contains("-") && montageId.Length >= 8;
+
+                        list.Add(new
+                        {
+                            montageId = montageId,
+                            generatedTitle = item.GeneratedTitle ?? $"Video Montage ({item.KindKey})",
+                            totalDuration = durationStr,
+                            totalDurationRaw = item.TotalDuration.ToString(),
+                            kindKey = item.KindKey,
+                            subKindKey = item.SubKindKey,
+                            clipCount = item.Clips?.Count ?? 0,
+                            streamers = streamers,
+                            youtubeUrl = isRealYtId ? $"https://www.youtube.com/watch?v={montageId}" : null,
+                            thumbnailUrl = isRealYtId ? $"https://img.youtube.com/vi/{montageId}/mqdefault.jpg" : null,
+                            finalVideoPath = item.FinalVideoPath,
+                            completed = item.Completed
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to read published videos for overview");
+            }
+
+            return list;
+        }
+
+        private List<object> GetRecentActivity(int limit = 8)
+        {
+            var list = new List<object>();
+            var historyFile = Path.Combine(_bagsDir, _cfg.Value.BagHistoryPath ?? "bag_history.json");
+            if (!File.Exists(historyFile)) return list;
+
+            try
+            {
+                var items = JsonFileService.Load<List<ClipInfo>>(historyFile);
+                if (items != null && items.Count > 0)
+                {
+                    var recent = items.AsEnumerable().Reverse().Take(limit);
+                    foreach (var c in recent)
+                    {
+                        list.Add(new
+                        {
+                            link = c.Link,
+                            streamer = c.Description ?? "Streamer",
+                            start = c.Start,
+                            end = c.End,
+                            kindKey = c.KindKey,
+                            subKindKey = c.SubKindKey,
+                            importedAt = c.ImportedAt
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to read history activity for overview");
+            }
+
+            return list;
+        }
+
+        private object GetOverviewKpis(List<object> channels, List<object> bagsInfo)
+        {
+            int totalPublished = 0;
+            int totalHarvestedClips = 0;
+            int activeQueue = 0;
+            int failedCount = 0;
+            TimeSpan totalDuration = TimeSpan.Zero;
+
+            var doneFile = Path.Combine(_bagsDir, _cfg.Value.BagYoutubeDonePath ?? "bag_youtube_done.json");
+            if (File.Exists(doneFile))
+            {
+                try
+                {
+                    var items = JsonFileService.Load<List<MontageItem>>(doneFile);
+                    if (items != null)
+                    {
+                        totalPublished = items.Count;
+                        foreach (var it in items)
+                        {
+                            totalDuration += it.TotalDuration;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            var historyFile = Path.Combine(_bagsDir, _cfg.Value.BagHistoryPath ?? "bag_history.json");
+            if (File.Exists(historyFile))
+            {
+                try
+                {
+                    var items = JsonFileService.Load<List<ClipInfo>>(historyFile);
+                    if (items != null) totalHarvestedClips = items.Count;
+                }
+                catch { }
+            }
+
+            var queueBagNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                _cfg.Value.BagDownloadPath ?? "bag_download.json",
+                _cfg.Value.BagTrimmedPath ?? "bag_trimmed.json",
+                _cfg.Value.BagMontagePath ?? "bag_montage.json",
+                _cfg.Value.BagYoutubePath ?? "bag_youtube.json"
+            };
+
+            int failedClipsCount = 0;
+            int failedMontagesCount = 0;
+
+            var failedFile = Path.Combine(_bagsDir, _cfg.Value.BagFailed ?? "bag_failed.json");
+            if (File.Exists(failedFile))
+            {
+                try
+                {
+                    var items = JsonFileService.Load<List<ClipInfo>>(failedFile);
+                    if (items != null)
+                    {
+                        failedClipsCount = items.Count(c => !string.IsNullOrWhiteSpace(c.Link));
+                    }
+                }
+                catch { }
+            }
+
+            var ytFailedFile = Path.Combine(_bagsDir, _cfg.Value.BagYoutubeFailedPath ?? "bag_youtube_failed.json");
+            if (File.Exists(ytFailedFile))
+            {
+                try
+                {
+                    var items = JsonFileService.Load<List<MontageItem>>(ytFailedFile);
+                    if (items != null)
+                    {
+                        failedMontagesCount = items.Count(m => !string.IsNullOrWhiteSpace(m.MontageId) || (m.Clips != null && m.Clips.Count > 0));
+                    }
+                }
+                catch { }
+            }
+
+            failedCount = failedClipsCount + failedMontagesCount;
+
+            foreach (var b in bagsInfo)
+            {
+                if (b is null) continue;
+                var fProp = b.GetType().GetProperty("fileName")?.GetValue(b)?.ToString() ?? "";
+                var cProp = Convert.ToInt32(b.GetType().GetProperty("itemCount")?.GetValue(b) ?? 0);
+
+                if (queueBagNames.Contains(fProp)) activeQueue += cProp;
+            }
+
+            int connectedCount = 0;
+            foreach (var ch in channels)
+            {
+                var isConn = ch.GetType().GetProperty("isConnected")?.GetValue(ch) as bool? ?? false;
+                if (isConn) connectedCount++;
+            }
+
+            int totalSuccessOps = totalPublished + totalHarvestedClips;
+            int totalAttemptedOps = totalSuccessOps + failedCount;
+            int successRate = totalAttemptedOps == 0 ? 100 : (int)Math.Round(((double)totalSuccessOps / totalAttemptedOps) * 100);
+
+            var hours = (int)totalDuration.TotalHours;
+            var minutes = totalDuration.Minutes;
+            var seconds = totalDuration.Seconds;
+            string formattedDuration = hours > 0 ? $"{hours}h {minutes}m" : $"{minutes}m {seconds}s";
+
+            return new
+            {
+                totalPublishedVideos = totalPublished,
+                totalClipsHarvested = totalHarvestedClips,
+                activeQueueItems = activeQueue,
+                connectedChannelsCount = connectedCount,
+                totalChannelsCount = channels.Count,
+                failedItemsCount = failedCount,
+                successRatePercent = successRate,
+                totalDurationFormatted = formattedDuration,
+                totalDurationSeconds = (int)totalDuration.TotalSeconds
             };
         }
 

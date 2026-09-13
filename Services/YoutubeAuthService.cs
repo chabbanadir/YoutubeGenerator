@@ -178,7 +178,7 @@ namespace YoutubeGenerator.Services
             return (refreshToken, accessToken, channelId, channelTitle);
         }
 
-        public void SaveChannelConnection(string kindKey, string channelId, string refreshToken)
+        public void SaveChannelConnection(string kindKey, string channelId, string refreshToken, string? channelTitle = null)
         {
             var cleanKey = kindKey.Trim().ToLowerInvariant();
             var file = Path.Combine(_kindsDir, $"{cleanKey}.json");
@@ -204,6 +204,10 @@ namespace YoutubeGenerator.Services
             {
                 existingDict["YoutubeChannelId"] = channelId;
             }
+            if (!string.IsNullOrWhiteSpace(channelTitle))
+            {
+                existingDict["YoutubeChannelTitle"] = channelTitle.Trim();
+            }
             if (!string.IsNullOrWhiteSpace(refreshToken))
             {
                 existingDict["YoutubeRefreshToken"] = refreshToken;
@@ -225,7 +229,7 @@ namespace YoutubeGenerator.Services
             string updatedJson = JsonSerializer.Serialize(existingDict, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(file, updatedJson);
 
-            _logger.LogInformation($"Successfully updated YouTube channel connection for kind '{cleanKey}'. ChannelId: {channelId}");
+            _logger.LogInformation($"Successfully updated YouTube channel connection for kind '{cleanKey}'. ChannelId: {channelId}, Title: {channelTitle}");
         }
 
         public void DisconnectChannel(string kindKey)

@@ -75,6 +75,9 @@ namespace YoutubeGenerator.Services
             if (!Directory.Exists(outputDir))
                 Directory.CreateDirectory(outputDir);
 
+            // Proactively clean up any stale chunk files older than 30 minutes
+            CleanupStaleChunks(outputDir);
+
             var chunkFiles = new List<string>();
             try
             {
@@ -84,6 +87,7 @@ namespace YoutubeGenerator.Services
 
                     var batchClips = clips.GetRange(i, Math.Min(maxBatchSize, clips.Count - i));
                     string chunkPath = Path.Combine(outputDir, $"chunk_{Guid.NewGuid():N}.mp4");
+                    chunkFiles.Add(chunkPath); // Track immediately so finally always cleans up even on crash or failure!
 
                     bool success = await MergeSingleBatchWithTransitionsAsync(batchClips, chunkPath, transitionType, transitionDuration, ct);
                     if (!success || !File.Exists(chunkPath))
@@ -91,8 +95,6 @@ namespace YoutubeGenerator.Services
                         _logger.LogError($"❌ Chunk rendering failed for batch starting at index {i}");
                         return false;
                     }
-
-                    chunkFiles.Add(chunkPath);
                 }
 
                 // Recursively merge the rendered chunks into final output
@@ -107,6 +109,32 @@ namespace YoutubeGenerator.Services
                         try { File.Delete(chunkFile); } catch { }
                     }
                 }
+            }
+        }
+
+        private void CleanupStaleChunks(string directory)
+        {
+            try
+            {
+                if (!Directory.Exists(directory)) return;
+                var staleChunks = Directory.GetFiles(directory, "chunk_*.mp4");
+                var threshold = DateTime.UtcNow.AddMinutes(-30);
+                foreach (var file in staleChunks)
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(file) < threshold)
+                        {
+                            File.Delete(file);
+                            _logger.LogInformation($"🧹 Cleaned up stale chunk file: {file}");
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to run stale chunk cleanup.");
             }
         }
 

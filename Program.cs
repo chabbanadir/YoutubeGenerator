@@ -113,4 +113,40 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
+
+// Startup self-healing: Reset any stale worker locks from previous crashes or SIGKILLs
+try
+{
+    var bagsDir = Path.Combine(app.Environment.ContentRootPath, "workspace", "bags");
+    var collectFile = Path.Combine(bagsDir, "worker_collect.json");
+    var montageFile = Path.Combine(bagsDir, "worker_montage.json");
+
+    if (File.Exists(collectFile))
+    {
+        var w1 = JsonFileService.Load<Worker1Model>(collectFile);
+        if (w1 != null && w1.Status)
+        {
+            w1.Status = false;
+            JsonFileService.Save(collectFile, w1);
+            app.Logger.LogInformation("🔄 Reset stale worker_collect status to false on startup.");
+        }
+    }
+
+    if (File.Exists(montageFile))
+    {
+        var w2 = JsonFileService.Load<Worker2State>(montageFile);
+        if (w2 != null && w2.Status)
+        {
+            w2.Status = false;
+            JsonFileService.Save(montageFile, w2);
+            app.Logger.LogInformation("🔄 Reset stale worker_montage status to false on startup.");
+        }
+    }
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "Failed to check or reset worker status on startup.");
+}
+
 app.Run();
+

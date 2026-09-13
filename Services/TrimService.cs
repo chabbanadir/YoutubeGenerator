@@ -101,8 +101,8 @@ namespace YoutubeGenerator.Services
              string firstClipPath,
              string workingDir)
         {
-            string concatListPath = Path.Combine(workingDir, "concat_intro_first.txt");
-            string tempOutputPath = Path.Combine(workingDir, "0_with_intro.mp4");
+            string concatListPath = Path.Combine(workingDir, $"concat_intro_{Guid.NewGuid():N}.txt");
+            string tempOutputPath = Path.Combine(workingDir, $"intro_temp_{Guid.NewGuid():N}.mp4");
 
             if (!File.Exists(introPath))
                 throw new FileNotFoundException("Intro video not found", introPath);
@@ -110,44 +110,38 @@ namespace YoutubeGenerator.Services
             if (!File.Exists(firstClipPath))
                 throw new FileNotFoundException("First trimmed clip not found", firstClipPath);
 
-            // 1. Create concat list
-            File.WriteAllText(concatListPath,
-                $"file '{introPath.Replace("\\", "/")}'\n" +
-                $"file '{firstClipPath.Replace("\\", "/")}'\n");
-
-            // 2. Concat with video re-encode
-            string args =
-                $"-y -f concat -safe 0 -i \"{concatListPath}\" " +
-                "-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p " +
-                "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
-                $"\"{tempOutputPath}\"";
-
-            var psi = new ProcessStartInfo
+            try
             {
-                FileName = "ffmpeg",
-                Arguments = args,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
+                // 1. Create concat list
+                await File.WriteAllTextAsync(concatListPath,
+                    $"file '{introPath.Replace("\\", "/")}'\n" +
+                    $"file '{firstClipPath.Replace("\\", "/")}'\n");
 
-            var process = Process.Start(psi);
-            string stderr = await process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
+                // 2. Concat with video re-encode
+                string args =
+                    $"-y -f concat -safe 0 -i \"{concatListPath}\" " +
+                    "-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p " +
+                    "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
+                    $"\"{tempOutputPath}\"";
 
-            if (process.ExitCode != 0)
-                throw new Exception($"FFmpeg concat intro failed: {stderr}");
+                var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", args, workingDir);
 
-            // Replace clip0 with concatenated file
-            File.Delete(firstClipPath);
-            File.Move(tempOutputPath, firstClipPath);
+                if (exitCode != 0)
+                    throw new Exception($"FFmpeg concat intro failed: {stderr}");
 
-            // 3. Cleanup
-            if (File.Exists(concatListPath))
-                File.Delete(concatListPath);
+                // Replace clip0 with concatenated file
+                File.Delete(firstClipPath);
+                File.Move(tempOutputPath, firstClipPath);
 
-            return true;
+                return true;
+            }
+            finally
+            {
+                if (File.Exists(concatListPath))
+                    try { File.Delete(concatListPath); } catch { }
+                if (File.Exists(tempOutputPath))
+                    try { File.Delete(tempOutputPath); } catch { }
+            }
         }
 
     }

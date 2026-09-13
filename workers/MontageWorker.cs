@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -183,25 +183,15 @@ namespace YoutubeGenerator.workers
                         youtubeBag.Add(packageToRender);
                         JsonFileService.Save(_bagYoutube, youtubeBag);
 
-                        // Cleanup trimmed clips EXCEPT the new first clip (we already updated reference)
-                        // This prevents deleting the file we just prepended intro into
+                        // Cleanup all trimmed clips for this package
                         foreach (var clip in packageToRender.Clips)
                         {
-                            // If the clip file equals the new first clip and exists, we still remove it because we've moved the package file
-                            // But to be safe, skip deleting if it's the same as the finalOutputPath or if it's the updated first clip that we want to keep
                             try
                             {
-                                if (string.Equals(clip.File, newFirstClip, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    // Skip deletion of the new first clip here; it's still useful as a source reference (optional)
-                                    _logger.LogInformation($"ℹ️ Skipping deletion of first clip (intro merged): {clip.File}");
-                                    continue;
-                                }
-
-                                if (File.Exists(clip.File))
+                                if (!string.IsNullOrEmpty(clip.File) && File.Exists(clip.File))
                                 {
                                     File.Delete(clip.File);
-                                    _logger.LogInformation($"🗑️ Deleted clip: {clip.File}");
+                                    _logger.LogInformation($"🗑️ Deleted trimmed clip: {clip.File}");
                                 }
                             }
                             catch (Exception ex)

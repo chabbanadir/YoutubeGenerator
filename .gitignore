@@ -370,3 +370,7 @@ workspace/bags/
 # --- Configuration (Secrets) ---
 #appSettings.json
 .env
+
+cookies.txt
+*.pdf
+twitch-extension-fixed/

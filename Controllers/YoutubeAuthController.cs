@@ -10,13 +10,16 @@ namespace YoutubeGenerator.Controllers
     {
         private readonly IYoutubeAuthService _authService;
         private readonly ILogger<YoutubeAuthController> _logger;
+        private readonly IConfiguration _config;
 
         public YoutubeAuthController(
             IYoutubeAuthService authService,
-            ILogger<YoutubeAuthController> logger)
+            ILogger<YoutubeAuthController> logger,
+            IConfiguration config)
         {
             _authService = authService;
             _logger = logger;
+            _config = config;
         }
 
         [HttpGet("config")]
@@ -26,12 +29,22 @@ namespace YoutubeGenerator.Controllers
             return Ok(new
             {
                 configured = !string.IsNullOrWhiteSpace(clientId),
-                clientId = clientId
+                clientId = clientId,
+                redirectUri = GetRedirectUri()
             });
         }
 
         private string GetRedirectUri()
         {
+            var overrideUri = _config["YouTube:RedirectUri"]
+                           ?? _config["YOUTUBE_REDIRECT_URI"]
+                           ?? Environment.GetEnvironmentVariable("YOUTUBE_REDIRECT_URI");
+
+            if (!string.IsNullOrWhiteSpace(overrideUri))
+            {
+                return overrideUri.Trim();
+            }
+
             var scheme = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() 
                          ?? Request.Scheme;
 
@@ -90,7 +103,7 @@ namespace YoutubeGenerator.Controllers
                 var (refreshToken, accessToken, channelId, channelTitle) = 
                     await _authService.ExchangeCodeAndFetchChannelAsync(code, redirectUri);
 
-                _authService.SaveChannelConnection(state, channelId, refreshToken);
+                _authService.SaveChannelConnection(state, channelId, refreshToken, channelTitle);
 
                 return Redirect($"/?connected={Uri.EscapeDataString(state)}&channel={Uri.EscapeDataString(channelTitle.Length > 0 ? channelTitle : channelId)}#profiles");
             }

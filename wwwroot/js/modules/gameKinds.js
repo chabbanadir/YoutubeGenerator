@@ -1,5 +1,5 @@
 // Game Kinds Management Module
-import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth, getApiUrl } from '../core/api.js';
+import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth, getApiUrl, getYoutubeIcon } from '../core/api.js';
 
 export function renderKindsGrid(kinds, callbacks = {}) {
   const container = document.getElementById('kindsGrid');
@@ -54,7 +54,7 @@ export function renderKindsGrid(kinds, callbacks = {}) {
 
         <div class="profile-section">
           <div class="profile-section-title" style="display: flex; justify-content: space-between; align-items: center;">
-            <span><i data-lucide="youtube" style="width: 14px; height: 14px; color: #ef4444;"></i> YouTube Channel Integration</span>
+            <span>${getYoutubeIcon(14, 'color: #ef4444; margin-right: 4px;')} YouTube Channel Integration</span>
             ${hasRefreshToken 
               ? `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem;"><i data-lucide="check-circle" style="width: 11px; height: 11px; display: inline;"></i> Connected</span>`
               : `<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.5rem;"><i data-lucide="alert-triangle" style="width: 11px; height: 11px; display: inline;"></i> Not Connected</span>`}
@@ -152,8 +152,8 @@ export function renderKindsGrid(kinds, callbacks = {}) {
             <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.35rem;">
               <i data-lucide="alert-circle" style="width: 14px; height: 14px; color: #f59e0b;"></i> Unlinked Channel
             </div>
-            <button type="button" class="btn-youtube-connect" onclick="window.connectYoutubeChannel('${safeKindKey}')" title="Link YouTube channel via Google OAuth">
-              <i data-lucide="youtube" style="width: 14px; height: 14px;"></i> Connect YouTube
+            <button type="button" class="btn-youtube-connect" style="background: #ef4444; color: white; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.85rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.02em;" onclick="window.connectYoutubeChannel('${safeKindKey}')" title="Link YouTube channel via Google OAuth">
+              ${getYoutubeIcon(16, 'margin-right: 4px;')} CONNECT YOUTUBE
             </button>
           `}
         </div>
@@ -355,7 +355,7 @@ export async function handleCreateAndConnectKind(e, callbacks = {}) {
     }
     if (createAndConnectBtn) {
       createAndConnectBtn.disabled = false;
-      createAndConnectBtn.innerHTML = '<i data-lucide="youtube" style="width: 14px; height: 14px;"></i> Create & Connect';
+      createAndConnectBtn.innerHTML = `${getYoutubeIcon(14, 'margin-right: 4px;')} Create & Connect`;
     }
   }
 }

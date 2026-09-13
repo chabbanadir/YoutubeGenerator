@@ -11,6 +11,7 @@
 
 /* Component Modules */
 @import './components/cards.css';
+@import './components/overview.css';
 @import './components/bags.css';
 @import './components/modals.css';
 @import './components/json-editor.css';

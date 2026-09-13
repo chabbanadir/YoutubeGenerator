@@ -11,7 +11,7 @@
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/dashboard.css?v=6">
+  <link rel="stylesheet" href="css/dashboard.css?v=8">
 </head>
 <body>
 
@@ -85,56 +85,221 @@
 
       <!-- TAB 1: PIPELINE OVERVIEW -->
       <div id="tab-overview" class="tab-view active">
-        <!-- Interactive Visual Pipeline -->
-        <div class="card">
+        <!-- 1. Executive KPI Metrics Grid -->
+        <div class="kpi-metrics-grid" id="overviewKpiGrid">
+          <!-- Populated dynamically via overview.js -->
+        </div>
+
+        <!-- 2. Linked YouTube Accounts Integration Hub -->
+        <div class="card youtube-hub-card">
+          <div class="card-header" style="margin-bottom: 0.25rem;">
+            <div class="card-title">
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; color: #ef4444;"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></span> Linked YouTube Channels
+            </div>
+            <div class="header-btns-group">
+              <span class="brand-badge" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #f87171;">OAUTH INTEGRATION</span>
+              <button class="btn btn-secondary btn-sm" id="btnManageProfilesYt" onclick="switchTab('profiles')" title="Manage YouTube OAuth & Channel Configurations" style="display: none;">
+                <i data-lucide="settings" style="width: 13px; height: 13px;"></i> Manage Profiles
+              </button>
+            </div>
+          </div>
+
+          <div class="youtube-channels-grid" id="youtubeChannelsGrid">
+            <!-- Populated dynamically via overview.js -->
+          </div>
+        </div>
+
+        <!-- 3. Interactive Visual Pipeline Flow -->
+        <div class="card pipeline-card-container" style="margin-bottom: 1.5rem;">
           <div class="card-header">
             <div class="card-title">
               <i data-lucide="git-merge" style="color: var(--primary);"></i> Automation Pipeline Flow
             </div>
-            <span class="text-muted" style="font-size: 0.8rem;">Click step to inspect bag items</span>
+            <div class="header-btns-group">
+              <span class="brand-badge" style="background: rgba(6, 182, 212, 0.1); border-color: rgba(6, 182, 212, 0.3); color: var(--accent-cyan);">6-STAGE REALTIME BAGS</span>
+              <span class="text-muted" style="font-size: 0.8rem; margin-left: 0.5rem;">Click step to inspect bag items</span>
+            </div>
           </div>
           <div class="pipeline-flow">
-            <div class="pipeline-step" onclick="openBagInExplorer('bag_download.json')">
-              <div class="pipeline-icon" style="color: var(--accent-cyan);">📥</div>
-              <div class="pipeline-name">Download Queue</div>
-              <div class="pipeline-val" id="pipe-download-count">0</div>
+            <!-- Step 1: Download Queue -->
+            <div class="pipeline-step-card" onclick="openBagInExplorer('bag_download.json')">
+              <div class="step-card-header">
+                <span class="step-card-num">STEP 01</span>
+                <span class="tag-chip game">STAGE 1</span>
+              </div>
+              <div class="step-card-body">
+                <div class="step-card-icon" style="background: rgba(6, 182, 212, 0.12); color: var(--accent-cyan);">
+                  <i data-lucide="download"></i>
+                </div>
+                <div class="step-card-info">
+                  <div class="step-card-title">Download Queue</div>
+                  <div class="step-card-sub">Raw source clips</div>
+                </div>
+              </div>
+              <div class="step-card-footer">
+                <span class="step-card-metric-label">Queued Items</span>
+                <span class="step-card-metric-val" id="pipe-download-count">0</span>
+              </div>
             </div>
-            <div class="pipeline-step" onclick="openBagInExplorer('bag_trimmed.json')">
-              <div class="pipeline-icon" style="color: var(--primary);">✂️</div>
-              <div class="pipeline-name">Trimmed Clips</div>
-              <div class="pipeline-val" id="pipe-trimmed-count">0</div>
+
+            <!-- Step 2: Trimmed Clips -->
+            <div class="pipeline-step-card" onclick="openBagInExplorer('bag_trimmed.json')">
+              <div class="step-card-header">
+                <span class="step-card-num">STEP 02</span>
+                <span class="tag-chip" style="background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">STAGE 2</span>
+              </div>
+              <div class="step-card-body">
+                <div class="step-card-icon" style="background: rgba(59, 130, 246, 0.12); color: #60a5fa;">
+                  <i data-lucide="scissors"></i>
+                </div>
+                <div class="step-card-info">
+                  <div class="step-card-title">Trimmed Clips</div>
+                  <div class="step-card-sub">Processed highlights</div>
+                </div>
+              </div>
+              <div class="step-card-footer">
+                <span class="step-card-metric-label">Ready Clips</span>
+                <span class="step-card-metric-val" id="pipe-trimmed-count">0</span>
+              </div>
             </div>
-            <div class="pipeline-step" onclick="openBagInExplorer('bag_montage.json')">
-              <div class="pipeline-icon" style="color: var(--accent-amber);">🎬</div>
-              <div class="pipeline-name">Montage Packages</div>
-              <div class="pipeline-val" id="pipe-montage-count">0</div>
+
+            <!-- Step 3: Montage Packages -->
+            <div class="pipeline-step-card" onclick="openBagInExplorer('bag_montage.json')">
+              <div class="step-card-header">
+                <span class="step-card-num">STEP 03</span>
+                <span class="tag-chip warning">STAGE 3</span>
+              </div>
+              <div class="step-card-body">
+                <div class="step-card-icon" style="background: rgba(245, 158, 11, 0.12); color: var(--accent-amber);">
+                  <i data-lucide="film"></i>
+                </div>
+                <div class="step-card-info">
+                  <div class="step-card-title">Montage Packages</div>
+                  <div class="step-card-sub">Video assembly</div>
+                </div>
+              </div>
+              <div class="step-card-footer">
+                <span class="step-card-metric-label">Packages</span>
+                <span class="step-card-metric-val" id="pipe-montage-count">0</span>
+              </div>
             </div>
-            <div class="pipeline-step" onclick="openBagInExplorer('bag_youtube.json')">
-              <div class="pipeline-icon" style="color: #a855f7;">🚀</div>
-              <div class="pipeline-name">Ready for Upload</div>
-              <div class="pipeline-val" id="pipe-youtube-count">0</div>
+
+            <!-- Step 4: Ready for Upload -->
+            <div class="pipeline-step-card" onclick="openBagInExplorer('bag_youtube.json')">
+              <div class="step-card-header">
+                <span class="step-card-num">STEP 04</span>
+                <span class="tag-chip" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3);">STAGE 4</span>
+              </div>
+              <div class="step-card-body">
+                <div class="step-card-icon" style="background: rgba(168, 85, 247, 0.12); color: #c084fc;">
+                  <i data-lucide="upload-cloud"></i>
+                </div>
+                <div class="step-card-info">
+                  <div class="step-card-title">Ready for Upload</div>
+                  <div class="step-card-sub">Staged for YouTube</div>
+                </div>
+              </div>
+              <div class="step-card-footer">
+                <span class="step-card-metric-label">Pending Upload</span>
+                <span class="step-card-metric-val" id="pipe-youtube-count">0</span>
+              </div>
             </div>
-            <div class="pipeline-step" onclick="openBagInExplorer('bag_youtube_done.json')">
-              <div class="pipeline-icon" style="color: var(--accent-emerald);">✅</div>
-              <div class="pipeline-name">Published</div>
-              <div class="pipeline-val" id="pipe-done-count">0</div>
+
+            <!-- Step 5: Published -->
+            <div class="pipeline-step-card" onclick="openBagInExplorer('bag_youtube_done.json')">
+              <div class="step-card-header">
+                <span class="step-card-num">STEP 05</span>
+                <span class="tag-chip success">DONE</span>
+              </div>
+              <div class="step-card-body">
+                <div class="step-card-icon" style="background: rgba(16, 185, 129, 0.12); color: var(--accent-emerald);">
+                  <i data-lucide="check-circle-2"></i>
+                </div>
+                <div class="step-card-info">
+                  <div class="step-card-title">Published</div>
+                  <div class="step-card-sub">Live YouTube videos</div>
+                </div>
+              </div>
+              <div class="step-card-footer">
+                <span class="step-card-metric-label">Completed</span>
+                <span class="step-card-metric-val" id="pipe-done-count">0</span>
+              </div>
             </div>
-            <div class="pipeline-step" onclick="openBagInExplorer('bag_failed.json')">
-              <div class="pipeline-icon" style="color: var(--accent-rose);">⚠️</div>
-              <div class="pipeline-name">Failed Items</div>
-              <div class="pipeline-val" id="pipe-failed-count">0</div>
+
+            <!-- Step 6: Failed Items -->
+            <div class="pipeline-step-card card-failed-step" onclick="openBagInExplorer('bag_failed.json')">
+              <div class="step-card-header">
+                <span class="step-card-num" style="color: #fca5a5;">STEP 06</span>
+                <span class="tag-chip" style="background: rgba(244, 63, 94, 0.15); color: var(--accent-rose); border: 1px solid rgba(244, 63, 94, 0.3);">ALERT</span>
+              </div>
+              <div class="step-card-body">
+                <div class="step-card-icon" style="background: rgba(244, 63, 94, 0.12); color: var(--accent-rose);">
+                  <i data-lucide="alert-triangle"></i>
+                </div>
+                <div class="step-card-info">
+                  <div class="step-card-title">Failed Items</div>
+                  <div class="step-card-sub">Exceptions & errors</div>
+                </div>
+              </div>
+              <div class="step-card-footer">
+                <span class="step-card-metric-label" style="color: #fca5a5;">Failures</span>
+                <span class="step-card-metric-val" id="pipe-failed-count" style="color: var(--accent-rose);">0</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- Bags Summary Cards Grid -->
-        <div class="card-header" style="margin-top: 0.5rem; margin-bottom: 0;">
-          <h3 class="card-title">
-            <i data-lucide="database" style="color: var(--accent-cyan);"></i> System Data Bags
-          </h3>
+        <!-- 4. Recent Published Videos Showcase -->
+        <div class="card showcase-card">
+          <div class="card-header" style="margin-bottom: 0.25rem;">
+            <div class="card-title">
+              <i data-lucide="clapperboard" style="color: var(--accent-emerald);"></i> Recent Published Videos
+            </div>
+            <div class="header-btns-group">
+              <span class="brand-badge" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: var(--accent-emerald);">LIVE ON YOUTUBE</span>
+              <button class="btn btn-secondary btn-sm" onclick="openBagInExplorer('bag_youtube_done.json')" title="View all completed video packages">
+                <i data-lucide="folder-kanban" style="width: 13px; height: 13px;"></i> View Published Bag
+              </button>
+            </div>
+          </div>
+          <div class="video-showcase-grid" id="recentPublishedGrid">
+            <!-- Populated dynamically via overview.js -->
+          </div>
         </div>
-        <div class="dashboard-grid" id="bagsOverviewGrid">
-          <!-- Dynamic Bags Cards will be populated here -->
+
+        <!-- 5. Dual Section: Background Workers Telemetry & Recent Twitch Clip Feed -->
+        <div class="telemetry-row-grid">
+          <!-- Left Column: Background Automation Workers -->
+          <div class="card" style="padding: 1.25rem;">
+            <div class="card-header" style="margin-bottom: 0.75rem;">
+              <div class="card-title">
+                <i data-lucide="cpu" style="color: var(--accent-cyan);"></i> Pipeline Automation Workers
+              </div>
+            </div>
+            <div class="workers-column" id="workerTelemetryBoxes">
+              <!-- Populated dynamically via overview.js -->
+            </div>
+          </div>
+
+          <!-- Right Column: Live Clip Activity Stream -->
+          <div class="activity-stream-card">
+            <div class="card-header" style="margin-bottom: 0.25rem;">
+              <div class="card-title">
+                <i data-lucide="activity" style="color: #c084fc;"></i> Recent Ingestion Activity
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="openBagInExplorer('bag_history.json')" title="View complete clip ingestion history">
+                <i data-lucide="history" style="width: 13px; height: 13px;"></i> History Bag
+              </button>
+            </div>
+            <div class="activity-list" id="recentActivityList">
+              <!-- Populated dynamically via overview.js -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. Compact Storage Snapshot Bar (Replaces 11 redundant cards) -->
+        <div id="storageSnapshotContainer">
+          <!-- Populated dynamically via overview.js -->
         </div>
       </div>
 
@@ -247,7 +412,7 @@
             <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem; justify-content: space-between;">
               <div>
                 <div class="card-title">
-                  <i data-lucide="youtube" style="color: #ef4444;"></i> Game Kinds (Channels & Authentication)
+                  <span style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; color: #ef4444;"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></span> Game Kinds (Channels & Authentication)
                 </div>
                 <span class="text-muted" style="font-size: 0.8rem;">Channel IDs, upload schedules, and OAuth authentication tokens</span>
               </div>
@@ -297,9 +462,19 @@
   <div class="modal-backdrop" id="loginModal">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 class="modal-title">
-          <i data-lucide="lock" style="color: var(--accent-indigo);"></i> Admin Authentication
-        </h3>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); display: flex; align-items: center; justify-content: center; color: var(--accent-indigo);">
+            <i data-lucide="lock" style="width: 18px; height: 18px;"></i>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <h3 class="modal-title" style="margin: 0; font-size: 1.05rem; font-weight: 700; color: white;">
+              Admin Authentication
+            </h3>
+            <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); font-weight: 400; margin-top: 2px;">
+              YouTube Generator Command Center
+            </span>
+          </div>
+        </div>
         <button type="button" class="modal-close-btn" onclick="closeLoginModal()" aria-label="Close">
           <i data-lucide="x" style="width: 16px; height: 16px;"></i>
         </button>
@@ -308,11 +483,11 @@
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label">Username</label>
-            <input type="text" class="form-input" id="loginUsername" required autocomplete="username" placeholder="Enter admin username">
+            <input type="text" class="form-input" id="loginUsername" required autocomplete="username" placeholder="admin@tubegen.io" style="font-family: var(--font-mono);">
           </div>
           <div class="form-group">
             <label class="form-label">Password</label>
-            <input type="password" class="form-input" id="loginPassword" required autocomplete="current-password" placeholder="Enter password">
+            <input type="password" class="form-input" id="loginPassword" required autocomplete="current-password" placeholder="••••••••••••" style="font-family: var(--font-mono);">
           </div>
           <div id="loginErrorMsg" style="display: none; color: #f43f5e; font-size: 0.85rem; padding: 0.5rem; background: rgba(244, 63, 94, 0.1); border-radius: 6px; border: 1px solid rgba(244, 63, 94, 0.2);"></div>
         </div>
@@ -328,9 +503,16 @@
   <div class="modal-backdrop" id="createKindModal">
     <div class="modal-card compact-modal" style="max-width: 540px;">
       <div class="modal-header">
-        <h3 class="modal-title" id="createKindModalTitle">
-          <i data-lucide="plus-circle" style="color: var(--primary);"></i> Create New Game Kind Profile
-        </h3>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); display: flex; align-items: center; justify-content: center; color: #10b981;">
+            <i data-lucide="plus-circle" style="width: 18px; height: 18px;"></i>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <h3 class="modal-title" id="createKindModalTitle" style="margin: 0; font-size: 1rem; font-weight: 700; color: white; letter-spacing: 0.03em;">
+              ADD SUBKIND ASSEMBLY PROFILE
+            </h3>
+          </div>
+        </div>
         <button type="button" class="modal-close-btn" onclick="closeCreateKindModal()" aria-label="Close">
           <i data-lucide="x" style="width: 16px; height: 16px;"></i>
         </button>
@@ -339,12 +521,16 @@
         <div class="modal-body compact-modal-body">
           <div class="form-row-2col">
             <div class="form-group">
-              <label class="form-label">Kind Key / Game Identifier <span style="color:#ef4444;">*</span></label>
-              <input type="text" class="form-input" id="newKindKey" required placeholder="e.g. fortnite, apex, gta5">
+              <label class="form-label" style="font-size: 0.72rem; letter-spacing: 0.04em; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem;">
+                <span style="color: #10b981; font-weight: 700;">•</span> GAME CATEGORY / KIND KEY <span style="color:#ef4444;">*</span>
+              </label>
+              <input type="text" class="form-input" id="newKindKey" required placeholder="e.g. fortnite, apex, gta5" style="font-family: var(--font-mono);">
             </div>
             <div class="form-group">
-              <label class="form-label">Min Delay (Hours)</label>
-              <input type="number" class="form-input" id="newKindMinDelayHours" value="8" min="1">
+              <label class="form-label" style="font-size: 0.72rem; letter-spacing: 0.04em; color: var(--text-muted); display: flex; align-items: center; gap: 0.3rem;">
+                <span style="color: #10b981; font-weight: 700;">•</span> MIN DELAY (HOURS)
+              </label>
+              <input type="number" class="form-input" id="newKindMinDelayHours" value="8" min="1" style="font-family: var(--font-mono);">
             </div>
           </div>
           <small style="color: var(--text-muted); font-size: 0.72rem; display: block; margin-top: -0.4rem; margin-bottom: 0.6rem;">
@@ -353,15 +539,15 @@
 
           <div class="oauth-mini-banner">
             <div class="form-group" style="margin-bottom: 0.4rem;">
-              <label class="form-label" style="color: #ef4444; display: flex; align-items: center; gap: 0.35rem;">
-                <i data-lucide="youtube" style="width: 14px; height: 14px;"></i> YouTube Channel ID (Optional)
+              <label class="form-label" style="color: #ef4444; display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; letter-spacing: 0.04em;">
+                <span style="color: #10b981; font-weight: 700;">•</span> YOUTUBE CHANNEL ID (OPTIONAL)
               </label>
-              <input type="text" class="form-input" id="newKindChannelId" placeholder="e.g. UCuSLLufPm0w1LCgqjgWAZTw">
+              <input type="text" class="form-input" id="newKindChannelId" placeholder="e.g. UCuSLLufPm0w1LCgqjgWAZTw" style="font-family: var(--font-mono);">
             </div>
             <div class="oauth-mini-actions">
               <span class="oauth-mini-hint"><i data-lucide="link" style="width: 12px; height: 12px; color: #ef4444;"></i> Connect YouTube via Google OAuth</span>
               <button type="button" class="btn btn-oauth-mini" id="createAndConnectBtn" onclick="handleCreateAndConnectKind(event)">
-                <i data-lucide="youtube" style="width: 13px; height: 13px;"></i> Create & Connect
+                <span style="display: inline-flex; align-items: center; width: 13px; height: 13px; margin-right: 4px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></span> Create & Connect
               </button>
             </div>
           </div>
@@ -370,7 +556,9 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="closeCreateKindModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="createKindSubmitBtn">Create Only</button>
+          <button type="submit" class="btn" id="createKindSubmitBtn" style="background: #10b981; color: #064e3b; border: none; font-weight: 700; display: flex; align-items: center; gap: 0.35rem; padding: 0.55rem 1.1rem; border-radius: 8px; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">
+            <i data-lucide="check" style="width: 16px; height: 16px;"></i> Create Profile
+          </button>
         </div>
       </form>
     </div>
@@ -485,6 +673,6 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Dashboard JavaScript Modules -->
-  <script type="module" src="js/main.js?v=5"></script>
+  <script type="module" src="js/main.js?v=8"></script>
 </body>
 </html>

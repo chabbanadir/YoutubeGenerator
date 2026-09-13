@@ -25,12 +25,14 @@ services:
     env_file:
       - .env
 
-    # Optional: resource limits
+    # Resource limits (8GB RAM, 3.5 CPUs)
+    mem_limit: 8192M
+    cpus: 3.5
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 2048M
+          cpus: '3.5'
+          memory: 8192M
 
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]

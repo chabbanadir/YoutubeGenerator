@@ -1,5 +1,5 @@
 // Pipeline Bags Explorer & Raw JSON Editing Module
-import { state, showToast, escapeHtml, escapeJsString, formatFileSize, formatDate, getApiUrl } from '../core/api.js';
+import { state, showToast, escapeHtml, escapeJsString, formatFileSize, formatDate, getApiUrl, getYoutubeIcon, getTwitchIcon } from '../core/api.js';
 
 export function setBagViewMode(mode) {
   state.currentBagViewMode = mode;
@@ -287,7 +287,7 @@ export function renderBagSummaryBanner() {
   if (streamers.size > 0) {
     html += `
       <div class="summary-stat-pill">
-        <i data-lucide="twitch" style="color: #9146FF;"></i>
+        ${getTwitchIcon(14, 'color: #9146FF; margin-right: 4px;')}
         <span>Streamers (${streamers.size}): <strong>${Array.from(streamers).slice(0, 4).join(', ')}${streamers.size > 4 ? '...' : ''}</strong></span>
       </div>
     `;
@@ -410,7 +410,7 @@ export function renderClipInfoCard(item, idx) {
       <div class="item-card-header">
         <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
           <span class="streamer-badge">
-            <i data-lucide="twitch" style="width: 12px; height: 12px; color: #9146FF;"></i>
+            ${getTwitchIcon(12, 'color: #9146FF; margin-right: 4px;')}
             ${escapeHtml(streamer)}
           </span>
           <span class="tag-chip game">${escapeHtml(gameTag)}</span>
@@ -480,7 +480,7 @@ export function renderMontageItemCard(item, idx) {
         ${item.YoutubeUrl ? `
           <div class="clip-action-bar" style="margin-top: 0.5rem;">
             <a href="${escapeHtml(item.YoutubeUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="flex: 1; justify-content: center; text-decoration: none; background: #FF0000; border-color: #FF0000;">
-              <i data-lucide="youtube" style="width: 14px; height: 14px;"></i> Open YouTube
+              ${getYoutubeIcon(14, 'margin-right: 4px;')} Open YouTube
             </a>
           </div>
         ` : ''}
@@ -527,30 +527,54 @@ export function getBagStageInfo(name) {
   return { title: name, shortTitle: name, emoji: '📄', icon: 'file-json', color: 'var(--text-muted)' };
 }
 
-// Render Bags Overview Grid
+// Render Bags Overview Grid with VPS-styled Telemetry Cards
 export function renderBagsOverviewGrid(bags) {
   const container = document.getElementById('bagsOverviewGrid');
   if (!container || !bags) return;
 
   container.innerHTML = bags.map(bag => {
     const info = getBagStageInfo(bag.fileName);
+    const isFailed = bag.fileName.includes('failed') && bag.itemCount > 0;
+    const isSensitive = bag.isSensitive;
+
     return `
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <i data-lucide="${info.icon}" style="color: ${info.color};"></i>
-            ${info.title}
+      <div class="card bag-overview-card ${isFailed ? 'card-failed' : ''}">
+        <div class="card-header" style="margin-bottom: 0.75rem;">
+          <div class="card-title" style="font-size: 0.95rem;">
+            <div style="width: 32px; height: 32px; border-radius: 6px; background: rgba(30, 41, 59, 0.8); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--border-color);">
+              <i data-lucide="${info.icon}" style="color: ${info.color}; width: 16px; height: 16px;"></i>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.1rem;">
+              <span>${info.title}</span>
+              <span style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); font-weight: 400;">${bag.fileName}</span>
+            </div>
           </div>
-          <span class="card-count ${bag.fileName.includes('failed') && bag.itemCount > 0 ? 'count-failed-badge' : ''}">${bag.itemCount} items</span>
+          <span class="card-count ${isFailed ? 'count-failed-badge' : ''}" style="font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem; padding: 0.2rem 0.65rem;">
+            ${bag.itemCount} item(s)
+          </span>
         </div>
-        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          <div>Filename: <strong style="font-family: var(--font-mono); font-size: 0.8rem;">${bag.fileName}</strong></div>
-          <div>Size: <strong>${formatFileSize(bag.sizeBytes)}</strong></div>
-          <div>Modified: <strong>${formatDate(bag.lastModified)}</strong></div>
+
+        <div class="bag-card-meta-grid" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; font-size: 0.78rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-muted);">Storage Size</span>
+            <strong style="font-family: var(--font-mono); color: var(--text-main);">${formatFileSize(bag.sizeBytes)}</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="color: var(--text-muted);">Last Modified</span>
+            <strong style="font-family: var(--font-mono); color: var(--text-main);">${formatDate(bag.lastModified)}</strong>
+          </div>
+          ${isSensitive ? `
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.3rem; margin-top: 0.1rem;">
+              <span style="color: #fca5a5; font-weight: 600;">Access</span>
+              <span class="tag-chip warning" style="font-size: 0.65rem;"><i data-lucide="lock" style="width: 10px; height: 10px;"></i> Restricted</span>
+            </div>
+          ` : ''}
         </div>
-        <div style="margin-top: auto; display: flex; justify-content: flex-end;">
-          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="window.openBagInExplorer('${bag.fileName}')">
-            <i data-lucide="eye"></i> Inspect Items
+
+        <div style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
+          <span class="tag-chip subkind" style="font-size: 0.68rem; text-transform: uppercase;">${bag.type || 'JSON'}</span>
+          <button class="btn btn-secondary btn-sm" onclick="window.openBagInExplorer('${bag.fileName}')">
+            <i data-lucide="eye" style="width: 13px; height: 13px;"></i> Inspect Bag
           </button>
         </div>
       </div>

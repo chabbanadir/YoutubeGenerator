@@ -12,6 +12,7 @@ import {
   renderBagsOverviewGrid, 
   renderBagsSidebarList 
 } from './modules/bags.js';
+import { renderOverview } from './modules/overview.js';
 import { 
   renderKindsGrid, 
   stepKindMinDelay, 
@@ -43,6 +44,12 @@ import {
 
 // Global tab switching
 export function switchTab(tabId) {
+  if (tabId === 'profiles' && !state.isAuthenticatedUser) {
+    showToast('Please login as Admin to access Profiles Manager', 'warning');
+    openLoginModal();
+    return;
+  }
+
   const targetTabBtn = document.getElementById(`tab-btn-${tabId}`);
   const targetTabView = document.getElementById(`tab-${tabId}`);
 
@@ -107,7 +114,10 @@ export async function fetchDashboardOverview(showNotification = false) {
     setVal('pipe-done-count', bagsMap['bag_youtube_done.json']);
     setVal('pipe-failed-count', bagsMap['bag_failed.json']);
 
-    // 3. Render Bags Overview Grid & Sidebar
+    // 3. Render Executive Overview Sections (KPIs, YouTube Hub, Showcase, Telemetry, Storage)
+    renderOverview(data);
+
+    // 4. Render Bags Overview Grid & Sidebar
     renderBagsOverviewGrid(data.bags || []);
     renderBagsSidebarList(data.bags || []);
 
@@ -215,7 +225,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     showToast(`YouTube connection error: ${decodeURIComponent(youtubeError)}`, 'error');
     window.history.replaceState({}, document.title, window.location.pathname + '#profiles');
   } else if (window.location.hash === '#profiles') {
-    switchTab('profiles');
+    if (state.isAuthenticatedUser) {
+      switchTab('profiles');
+    }
   }
 
   if (window.lucide) {

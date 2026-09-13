@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 using YoutubeGenerator.Interfaces;
 using YoutubeGenerator.Models;
@@ -86,6 +86,10 @@ namespace YoutubeGenerator.workers
 
                             // compute schedule time
                             DateTime publishTime = creds.UploadConfig.LastUploadTime.AddHours(creds.UploadConfig.MinDelayHours);
+                            if (publishTime <= DateTime.UtcNow)
+                            {
+                                publishTime = DateTime.UtcNow.AddMinutes(15);
+                            }
 
                             _logger.LogInformation(
                                 $"📤 Uploading montage {metaItem.MontageId}  start — publish at {publishTime}");
@@ -114,6 +118,20 @@ namespace YoutubeGenerator.workers
                             JsonFileService.Save(_bagYoutubeDone, bagDone);
 
                             _logger.LogInformation($"✅ Upload complete: {videoId}");
+
+                            // Delete uploaded montage file from disk
+                            if (!string.IsNullOrEmpty(metaItem.FinalVideoPath) && File.Exists(metaItem.FinalVideoPath))
+                            {
+                                try
+                                {
+                                    File.Delete(metaItem.FinalVideoPath);
+                                    _logger.LogInformation($"🗑️ Deleted uploaded video from disk: {metaItem.FinalVideoPath}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger.LogWarning(ex, $"Failed to delete uploaded video {metaItem.FinalVideoPath}");
+                                }
+                            }
 
 
                         }
