@@ -7,5 +7,7 @@ namespace YoutubeGenerator.Interfaces
         void SaveChannelConnection(string kindKey, string channelId, string refreshToken, string? channelTitle = null);
         void DisconnectChannel(string kindKey);
         (string ClientId, string ClientSecret) GetGlobalCredentials();
+        Task<bool> RefreshAndValidateTokenAsync(string kindKey);
+        Task<Dictionary<string, bool>> RefreshAllTokensAsync();
     }
 }

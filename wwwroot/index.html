@@ -11,7 +11,7 @@
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/dashboard.css?v=8">
+  <link rel="stylesheet" href="css/dashboard.css?v=10">
 </head>
 <body>
 
@@ -117,7 +117,10 @@
             </div>
             <div class="header-btns-group">
               <span class="brand-badge" style="background: rgba(6, 182, 212, 0.1); border-color: rgba(6, 182, 212, 0.3); color: var(--accent-cyan);">6-STAGE REALTIME BAGS</span>
-              <span class="text-muted" style="font-size: 0.8rem; margin-left: 0.5rem;">Click step to inspect bag items</span>
+              <button class="btn btn-secondary btn-sm" id="btnToggleSubPipeline" onclick="window.toggleRenderInspector()" title="Toggle Stage 3 Live Render Inspector">
+                <i data-lucide="activity" style="width: 14px; height: 14px; color: var(--accent-amber);"></i> Stage 3 Inspector
+              </button>
+              <span class="text-muted" style="font-size: 0.8rem; margin-left: 0.25rem;">Click step to inspect bag items</span>
             </div>
           </div>
           <div class="pipeline-flow">
@@ -164,10 +167,10 @@
             </div>
 
             <!-- Step 3: Montage Packages -->
-            <div class="pipeline-step-card" onclick="openBagInExplorer('bag_montage.json')">
+            <div class="pipeline-step-card" id="pipelineStep3Card" onclick="openBagInExplorer('bag_montage.json')">
               <div class="step-card-header">
                 <span class="step-card-num">STEP 03</span>
-                <span class="tag-chip warning">STAGE 3</span>
+                <span class="tag-chip warning" id="step3LiveBadge">STAGE 3</span>
               </div>
               <div class="step-card-body">
                 <div class="step-card-icon" style="background: rgba(245, 158, 11, 0.12); color: var(--accent-amber);">
@@ -175,8 +178,12 @@
                 </div>
                 <div class="step-card-info">
                   <div class="step-card-title">Montage Packages</div>
-                  <div class="step-card-sub">Video assembly</div>
+                  <div class="step-card-sub" id="step3FooterText">Video assembly</div>
                 </div>
+              </div>
+              <!-- Live Inline Progress on Step 3 -->
+              <div class="step-inline-progress" id="step3InlineProgress" style="display: none;">
+                <div class="step-inline-progress-bar" id="step3InlineProgressBar" style="width: 0%;"></div>
               </div>
               <div class="step-card-footer">
                 <span class="step-card-metric-label">Packages</span>
@@ -244,6 +251,98 @@
               <div class="step-card-footer">
                 <span class="step-card-metric-label" style="color: #fca5a5;">Failures</span>
                 <span class="step-card-metric-val" id="pipe-failed-count" style="color: var(--accent-rose);">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- STAGE 3 SUB-PIPELINE & LIVE RENDER TELEMETRY INSPECTOR -->
+          <div class="montage-render-inspector" id="montageRenderInspectorPanel">
+            <!-- Telemetry Bar & Controls -->
+            <div class="render-inspector-header">
+              <div class="render-target-meta">
+                <div class="render-title-group">
+                  <span class="sub-pipeline-tag">STAGE 03 SUB-PIPELINE</span>
+                  <span class="status-pill idle" id="renderStatusPill">
+                    <span class="idle-dot"></span> STANDING BY
+                  </span>
+                </div>
+                <div class="render-meta-chips">
+                  <span class="render-chip montage-id" id="renderMontageId">No Active Session</span>
+                  <span class="render-chip kind-badge" id="renderKindTag" style="display: none;">LOL / NORMAL</span>
+                  <span class="render-chip clips-count" id="renderClipCount">0 Clips</span>
+                  <span class="render-chip batch-info" id="renderBatchInfo" style="display: none;">0 Batches Programmed</span>
+                  <span class="render-chip batch-target" id="renderBatchTarget" style="display: none;">Target: --</span>
+                </div>
+              </div>
+
+              <!-- Live Progress & Metrics HUD -->
+              <div class="render-hud-stats">
+                <div class="hud-stat-box">
+                  <span class="hud-stat-label">CURRENT BATCH</span>
+                  <span class="hud-stat-value" id="renderBatchVal">-- / --</span>
+                </div>
+                <div class="hud-stat-box">
+                  <span class="hud-stat-label">ENCODING SPEED</span>
+                  <span class="hud-stat-value" id="renderSpeedVal">--x</span>
+                </div>
+                <div class="hud-stat-box">
+                  <span class="hud-stat-label">FFMPEG FPS</span>
+                  <span class="hud-stat-value" id="renderFpsVal">-- FPS</span>
+                </div>
+                <div class="hud-stat-box">
+                  <span class="hud-stat-label">TIME ENCODED</span>
+                  <span class="hud-stat-value" id="renderTimeVal">00:00:00</span>
+                </div>
+
+                <div class="hud-overall-progress-box">
+                  <div class="hud-progress-info">
+                    <span class="hud-stat-label">OVERALL STAGE 3 PROGRESS</span>
+                    <span class="hud-progress-percent" id="renderOverallPercentText">0%</span>
+                  </div>
+                  <div class="hud-progress-bar-wrap">
+                    <div class="hud-progress-bar" id="renderOverallProgressBar" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="hud-actions-group">
+                  <button class="btn btn-primary btn-sm" id="btnTriggerMontage" onclick="window.triggerMontage()" title="Trigger render for packages with Completed: true">
+                    <i data-lucide="play" style="width: 13px; height: 13px;"></i> <span class="desktop-only-inline">Trigger Render</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Visual 5-Stage Stepper -->
+            <div class="sub-pipeline-stepper" id="subPipelineStepper">
+              <!-- Populated dynamically via renderTracker.js -->
+            </div>
+
+            <!-- Live Terminal & FFmpeg Log Console -->
+            <div class="render-terminal-container">
+              <div class="terminal-toolbar">
+                <div class="terminal-title">
+                  <i data-lucide="terminal" style="color: var(--accent-cyan); width: 14px; height: 14px;"></i>
+                  <span>Live Render Engine & FFmpeg Telemetry Feed</span>
+                  <span class="terminal-counter" id="terminalLineCount">0 events</span>
+                </div>
+                <div class="terminal-controls">
+                  <button class="terminal-btn active" id="btnToggleAutoScroll" title="Toggle Auto-Scroll">
+                    <i data-lucide="arrow-down" style="width: 12px; height: 12px;"></i> Auto-Scroll
+                  </button>
+                  <button class="terminal-btn" id="btnClearTerminal" title="Clear Console">
+                    <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i> Clear
+                  </button>
+                </div>
+              </div>
+              <div class="terminal-body" id="renderTerminalBody">
+                <div class="terminal-empty">
+                  <i data-lucide="terminal" style="width: 28px; height: 28px; opacity: 0.4;"></i>
+                  <div>Waiting for Montage Worker to begin compiling packages.</div>
+                  <div style="font-size: 0.76rem; margin-top: 0.25rem; color: var(--text-muted);">
+                    When a completed package is present in <code>bag_montage.json</code>, active rendering steps, batch metrics, and FFmpeg logs stream here live.
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -673,6 +772,6 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Dashboard JavaScript Modules -->
-  <script type="module" src="js/main.js?v=8"></script>
+  <script type="module" src="js/main.js?v=10"></script>
 </body>
 </html>

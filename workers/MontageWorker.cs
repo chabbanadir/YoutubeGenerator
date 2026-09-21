@@ -20,6 +20,7 @@ namespace YoutubeGenerator.workers
         private readonly IHostApplicationLifetime _appLifetime;
         private readonly IPathService _pathService;
         private readonly IMontageProfileService _profileService;
+        private readonly IRenderTrackerService? _renderTracker;
 
         private readonly string _rootPath;
         private readonly string _dirBags;
@@ -37,7 +38,8 @@ namespace YoutubeGenerator.workers
             IWebHostEnvironment env,
             IHostApplicationLifetime appLifetime,
             IPathService pathService,
-            IMontageProfileService profileService)
+            IMontageProfileService profileService,
+            IRenderTrackerService? renderTracker = null)
         {
             _logger = logger;
             _transitionService = transitionService;
@@ -45,6 +47,7 @@ namespace YoutubeGenerator.workers
             _appLifetime = appLifetime;
             _pathService = pathService;
             _profileService = profileService;
+            _renderTracker = renderTracker;
 
             var cfgValue = cfg.Value;
 
@@ -95,6 +98,7 @@ namespace YoutubeGenerator.workers
                 if (montageBag.Count == 0)
                 {
                     _logger.LogInformation("📭 Montage bag is empty.");
+                    _renderTracker?.AddLog("Montage check: bag_montage.json is empty. Standing by.", "info");
                     return;
                 }
 
@@ -102,17 +106,27 @@ namespace YoutubeGenerator.workers
                 if (completedPackages.Count == 0)
                 {
                     _logger.LogInformation("❌ No completed montage package found. Nothing to render yet.");
+                    _renderTracker?.AddLog("Montage check: No completed packages found in bag_montage.json.", "info");
                     return;
                 }
 
                 foreach (var packageToRender in completedPackages.ToList())
                 {
+                    _renderTracker?.StartSession(
+                        packageToRender.MontageId,
+                        packageToRender.KindKey,
+                        packageToRender.SubKindKey,
+                        packageToRender.Clips.Count,
+                        packageToRender.TotalDuration.TotalSeconds
+                    );
 
                     _logger.LogInformation(
                         $"🎬 Rendering package: {packageToRender.MontageId} " +
                         $"({packageToRender.KindKey}/{packageToRender.SubKindKey}, {packageToRender.Clips.Count} clips)");
 
-                    // Load profile for this specific kind/subkind
+                    // Stage 3.1: Profile & Asset Preparation
+                    _renderTracker?.SetStep(1, $"Resolving specs for {packageToRender.KindKey}/{packageToRender.SubKindKey}");
+
                     var profile = _profileService.GetProfile(
                         packageToRender.KindKey,
                         packageToRender.SubKindKey
@@ -120,6 +134,7 @@ namespace YoutubeGenerator.workers
 
                     string introPath = Path.Combine(_dirResources, profile.IntroFile);
                     _logger.LogInformation($"📼 Intro path: {introPath}");
+                    _renderTracker?.AddLog($"[Assets] Intro file: {profile.IntroFile}, Transition: {profile.TransitionAnimation} ({profile.TransitionDuration}s)", "info");
 
                     // Directories for montage/trim
                     var dirMontage = _pathService.GetMontageDir(
@@ -138,10 +153,11 @@ namespace YoutubeGenerator.workers
 
                     string finalOutputPath = Path.Combine(dirMontage, $"{packageToRender.MontageId}.mp4");
 
-                    // Apply intro to first clip
+                    _renderTracker?.UpdateStepProgress(1, 100, "Specs and output directories validated");
+
+                    // Stage 3.2: Intro stitching
                     string firstClipPath = packageToRender.Clips.First().File;
 
-                    // Prepend intro and update path in the package to point to the new trimmed file
                     await _trimService.PrependIntroAsync(
                         introPath,
                         firstClipPath,
@@ -151,20 +167,18 @@ namespace YoutubeGenerator.workers
                     var newFirstClip = Path.Combine(dirTrim, Path.GetFileName(firstClipPath));
                     if (!File.Exists(newFirstClip))
                     {
-                        // It's possible PrependIntro wrote directly into the same location or different; handle both cases
-                        // If PrependIntro replaced file in-place, keep that path; otherwise fallback to original trimmed path
                         newFirstClip = firstClipPath;
                     }
 
-                    // Update the package's first clip path so later cleanup and youtube bag reference the correct file
+                    // Update package's first clip path
                     packageToRender.Clips[0].File = newFirstClip;
 
-                    // Build ordered list of clips for merging (use updated first clip path)
+                    // Build ordered list of clips for merging
                     List<string> videoPaths = new List<string>();
                     videoPaths.Add(newFirstClip);
                     videoPaths.AddRange(packageToRender.Clips.Skip(1).Select(c => c.File));
 
-                    // Merge with transitions
+                    // Stage 3.3 & 3.4: Probing and Transition Merging
                     bool success = await _transitionService.MergeVideosWithTransitionsAsync(
                         videoPaths,
                         finalOutputPath,
@@ -175,13 +189,17 @@ namespace YoutubeGenerator.workers
 
                     if (success)
                     {
+                        // Stage 3.5: Final packaging & pipeline handoff
+                        _renderTracker?.SetStep(5, "Moving package to bag_youtube.json and cleaning intermediate files");
+
                         packageToRender.FinalVideoPath = finalOutputPath;
 
                         var youtubeBag = JsonFileService.Load<List<MontageItem>>(_bagYoutube);
-                        // Mark package as not completed to avoid re-render; move to youtube queue
                         packageToRender.Completed = false;
                         youtubeBag.Add(packageToRender);
                         JsonFileService.Save(_bagYoutube, youtubeBag);
+
+                        _renderTracker?.AddLog($"[Handoff] Added package to bag_youtube.json. Queue count: {youtubeBag.Count}", "step");
 
                         // Cleanup all trimmed clips for this package
                         foreach (var clip in packageToRender.Clips)
@@ -210,16 +228,21 @@ namespace YoutubeGenerator.workers
 
                         _logger.LogInformation($"✅ Final video generated and moved to youtube bag: {finalOutputPath}");
                         worker.FinalCounter += 1;
+
+                        _renderTracker?.UpdateStepProgress(5, 100, "Package staged & intermediate files cleaned");
+                        _renderTracker?.CompleteSession(finalOutputPath);
                     }
                     else
                     {
                         _logger.LogError($"❌ Merge failed for package {packageToRender.MontageId}");
+                        _renderTracker?.FailSession($"Merge failed for package {packageToRender.MontageId}");
                     }
                 }   
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "❌ Error during montage worker execution.");
+                _renderTracker?.FailSession(ex.Message);
             }
             finally
             {

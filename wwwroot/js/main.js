@@ -41,6 +41,11 @@ import {
   closeConfirmDeleteModal, 
   executeProfileDelete 
 } from './modules/profiles.js';
+import { 
+  initRenderTracker, 
+  triggerMontage, 
+  toggleRenderInspector 
+} from './modules/renderTracker.js';
 
 // Global tab switching
 export function switchTab(tabId) {
@@ -182,6 +187,9 @@ window.handleSaveRawJsonInline = () => handleSaveRawJsonInline({ onOverviewRefre
 window.formatRawJson = formatRawJson;
 window.resetRawJson = resetRawJson;
 
+window.triggerMontage = triggerMontage;
+window.toggleRenderInspector = toggleRenderInspector;
+
 // Global ESC key & Backdrop Click listeners to close active modals
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' || e.key === 'Esc') {
@@ -209,6 +217,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('DOMContentLoaded', async () => {
   await checkAuthStatus();
   await fetchDashboardOverview();
+  initRenderTracker();
 
   const urlParams = new URLSearchParams(window.location.search);
   const connectedKind = urlParams.get('connected');

@@ -1,0 +1,611 @@
+/* ==========================================================================
+   Live Montage Render Tracking & Sub-Pipeline Styles
+   ========================================================================== */
+
+/* 1. Step 3 Active Glow & Progress Animations */
+.pipeline-step-card.rendering-active {
+  border-color: rgba(245, 158, 11, 0.6) !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.25), inset 0 0 15px rgba(245, 158, 11, 0.08) !important;
+  animation: step3GlowPulse 2.5s infinite alternate;
+}
+
+@keyframes step3GlowPulse {
+  0% {
+    border-color: rgba(245, 158, 11, 0.4);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+  }
+  100% {
+    border-color: rgba(245, 158, 11, 0.85);
+    box-shadow: 0 0 24px rgba(245, 158, 11, 0.35);
+  }
+}
+
+.step-inline-progress {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  margin: 0.5rem 0 0.25rem 0;
+  overflow: hidden;
+}
+
+.step-inline-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-amber), #fbbf24);
+  border-radius: 2px;
+  transition: width 0.35s ease;
+}
+
+.pulse-glow {
+  animation: badgePulse 2s infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.pulse-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #34d399;
+  margin-right: 5px;
+  box-shadow: 0 0 8px #34d399;
+  animation: radarPing 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes radarPing {
+  0% { transform: scale(0.9); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+  100% { transform: scale(0.9); opacity: 1; }
+}
+
+.idle-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  margin-right: 5px;
+}
+
+/* 2. Montage Render Inspector Panel */
+.montage-render-inspector {
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  transition: all 0.3s ease;
+}
+
+/* Header & Meta */
+.render-inspector-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1.15rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 1.25rem;
+}
+
+.render-target-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.render-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.sub-pipeline-tag {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--accent-amber);
+  text-transform: uppercase;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 12px;
+  letter-spacing: 0.03em;
+}
+
+.status-pill.active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.status-pill.idle {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-pill.completed {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.status-pill.failed {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--accent-rose);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}
+
+.render-meta-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.render-chip {
+  font-size: 0.72rem;
+  padding: 0.18rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.render-chip.montage-id {
+  font-family: 'Fira Code', monospace;
+  font-weight: 600;
+  color: var(--text-main);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.render-chip.kind-badge {
+  font-weight: 700;
+  color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.25);
+}
+
+.render-chip.clips-count {
+  font-weight: 600;
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.1);
+  border-color: rgba(168, 85, 247, 0.25);
+}
+
+/* Telemetry Stats & Actions HUD */
+.render-hud-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.15rem;
+}
+
+.hud-stat-box {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.hud-stat-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.hud-stat-value {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+  font-family: 'Fira Code', monospace;
+}
+
+.hud-overall-progress-box {
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.hud-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hud-progress-percent {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--accent-amber);
+  font-family: 'Fira Code', monospace;
+}
+
+.hud-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hud-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-amber) 0%, #34d399 100%);
+  border-radius: 3px;
+  transition: width 0.35s ease;
+}
+
+.hud-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* 3. Visual 5-Stage Stepper */
+.sub-pipeline-stepper {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+  position: relative;
+}
+
+@media (max-width: 1024px) {
+  .sub-pipeline-stepper {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .sub-pipeline-stepper {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sub-step-card {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+.sub-step-card.active {
+  border-color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.06);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.15);
+}
+
+.sub-step-card.completed {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.sub-step-card.failed {
+  border-color: rgba(244, 63, 94, 0.4);
+  background: rgba(244, 63, 94, 0.05);
+}
+
+.sub-step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.sub-step-num {
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-family: 'Fira Code', monospace;
+  color: var(--text-muted);
+}
+
+.sub-step-card.active .sub-step-num {
+  color: var(--accent-amber);
+}
+
+.sub-step-card.completed .sub-step-num {
+  color: #34d399;
+}
+
+.sub-step-chip {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  letter-spacing: 0.03em;
+}
+
+.sub-step-chip.pending {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+}
+
+.sub-step-chip.active {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-amber);
+}
+
+.sub-step-chip.completed {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.sub-step-chip.failed {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--accent-rose);
+}
+
+.sub-step-body {
+  margin-bottom: 0.65rem;
+}
+
+.sub-step-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.2rem;
+}
+
+.sub-step-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.sub-step-detail {
+  font-size: 0.68rem;
+  color: var(--accent-cyan);
+  margin-top: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-step-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sub-step-progress-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.sub-step-progress-bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.sub-step-progress-bar.active {
+  background: var(--accent-amber);
+}
+
+.sub-step-progress-bar.completed {
+  background: #34d399;
+}
+
+.sub-step-progress-bar.pending {
+  background: var(--text-muted);
+}
+
+.sub-step-progress-bar.failed {
+  background: var(--accent-rose);
+}
+
+.sub-step-pct {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-family: 'Fira Code', monospace;
+  min-width: 25px;
+  text-align: right;
+}
+
+/* 4. Live Terminal & FFmpeg Feed Console */
+.render-terminal-container {
+  background: #090d16;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.85rem;
+  background: rgba(15, 23, 42, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.terminal-counter {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.35rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border-radius: 4px;
+}
+
+.terminal-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.terminal-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all 0.2s ease;
+}
+
+.terminal-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+}
+
+.terminal-btn.active {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--accent-cyan);
+  border-color: rgba(6, 182, 212, 0.3);
+}
+
+.terminal-body {
+  height: 220px;
+  max-height: 350px;
+  overflow-y: auto;
+  padding: 0.75rem 0.85rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.terminal-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  text-align: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+}
+
+.terminal-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  word-break: break-word;
+}
+
+.terminal-time {
+  color: #64748b;
+  flex-shrink: 0;
+  font-size: 0.68rem;
+}
+
+.terminal-tag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.terminal-tag.info {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.terminal-tag.step {
+  background: rgba(6, 182, 212, 0.18);
+  color: var(--accent-cyan);
+}
+
+.terminal-tag.ffmpeg {
+  background: rgba(168, 85, 247, 0.18);
+  color: #c084fc;
+}
+
+.terminal-tag.success {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+}
+
+.terminal-tag.warn {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--accent-amber);
+}
+
+.terminal-tag.error {
+  background: rgba(244, 63, 94, 0.18);
+  color: var(--accent-rose);
+}
+
+.terminal-msg {
+  color: #cbd5e1;
+  flex: 1;
+}
+
+.terminal-line.ffmpeg .terminal-msg {
+  color: #94a3b8;
+}
+
+.terminal-line.success .terminal-msg {
+  color: #a7f3d0;
+  font-weight: 600;
+}
+
+.terminal-line.step .terminal-msg {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.terminal-line.error .terminal-msg {
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

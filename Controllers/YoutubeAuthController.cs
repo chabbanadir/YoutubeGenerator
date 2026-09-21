@@ -142,5 +142,25 @@ namespace YoutubeGenerator.Controllers
                 return StatusCode(500, new { error = ex.Message });
             }
         }
+
+        [HttpPost("refresh-tokens")]
+        public async Task<IActionResult> RefreshTokens()
+        {
+            try
+            {
+                var results = await _authService.RefreshAllTokensAsync();
+                return Ok(new
+                {
+                    success = true,
+                    results = results,
+                    timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to refresh YouTube OAuth tokens.");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
     }
 }

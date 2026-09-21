@@ -253,5 +253,107 @@ namespace YoutubeGenerator.Services
 
             _logger.LogInformation($"Successfully disconnected YouTube channel for kind '{cleanKey}'.");
         }
+
+        public async Task<bool> RefreshAndValidateTokenAsync(string kindKey)
+        {
+            var cleanKey = kindKey.Trim().ToLowerInvariant();
+            var file = Path.Combine(_kindsDir, $"{cleanKey}.json");
+            if (!File.Exists(file)) return false;
+
+            var (clientId, clientSecret) = GetGlobalCredentials();
+
+            Dictionary<string, object> existingDict;
+            try
+            {
+                var text = await File.ReadAllTextAsync(file);
+                existingDict = JsonSerializer.Deserialize<Dictionary<string, object>>(text) ?? new();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"Failed to parse kind profile for '{cleanKey}'.");
+                return false;
+            }
+
+            string refreshToken = "";
+            if (existingDict.TryGetValue("YoutubeRefreshToken", out var rtObj) && rtObj != null)
+            {
+                refreshToken = rtObj.ToString() ?? "";
+            }
+
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                _logger.LogInformation($"[TokenRefresh] Channel '{cleanKey}' has no refresh token configured. Skipping.");
+                return false;
+            }
+
+            try
+            {
+                var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
+                {
+                    ClientSecrets = new ClientSecrets
+                    {
+                        ClientId = clientId,
+                        ClientSecret = clientSecret
+                    },
+                    Scopes = new[]
+                    {
+                        YouTubeService.Scope.YoutubeUpload,
+                        YouTubeService.Scope.YoutubeReadonly
+                    }
+                });
+
+                _logger.LogInformation($"[TokenRefresh] Validating & refreshing YouTube OAuth token for channel '{cleanKey}'...");
+                TokenResponse tokenResponse = await flow.RefreshTokenAsync("user", refreshToken, CancellationToken.None);
+
+                if (!string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+                {
+                    _logger.LogInformation($"✅ [TokenRefresh] YouTube token is VALID for channel '{cleanKey}'.");
+
+                    if (!string.IsNullOrWhiteSpace(tokenResponse.RefreshToken) && tokenResponse.RefreshToken != refreshToken)
+                    {
+                        existingDict["YoutubeRefreshToken"] = tokenResponse.RefreshToken;
+                        _logger.LogInformation($"🔄 [TokenRefresh] Captured rotated refresh token for '{cleanKey}'.");
+                    }
+
+                    existingDict["LastTokenRefreshUtc"] = DateTime.UtcNow.ToString("o");
+                    existingDict["TokenStatus"] = "Valid";
+
+                    string updatedJson = JsonSerializer.Serialize(existingDict, new JsonSerializerOptions { WriteIndented = true });
+                    await File.WriteAllTextAsync(file, updatedJson);
+                    return true;
+                }
+            }
+            catch (TokenResponseException ex) when (ex.Error?.Error == "invalid_grant" || ex.Message.Contains("invalid_grant"))
+            {
+                _logger.LogError($"🚨 [TokenRefresh] YouTube OAuth token for channel '{cleanKey}' is EXPIRED or REVOKED (invalid_grant)! Channel re-authentication required.");
+                existingDict["TokenStatus"] = "Expired";
+                existingDict["LastTokenRefreshUtc"] = DateTime.UtcNow.ToString("o");
+
+                string updatedJson = JsonSerializer.Serialize(existingDict, new JsonSerializerOptions { WriteIndented = true });
+                await File.WriteAllTextAsync(file, updatedJson);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"⚠️ [TokenRefresh] Error validating token for channel '{cleanKey}'.");
+            }
+
+            return false;
+        }
+
+        public async Task<Dictionary<string, bool>> RefreshAllTokensAsync()
+        {
+            var results = new Dictionary<string, bool>();
+            if (!Directory.Exists(_kindsDir)) return results;
+
+            foreach (var filePath in Directory.GetFiles(_kindsDir, "*.json"))
+            {
+                var kindKey = Path.GetFileNameWithoutExtension(filePath);
+                bool success = await RefreshAndValidateTokenAsync(kindKey);
+                results[kindKey] = success;
+            }
+
+            return results;
+        }
     }
 }

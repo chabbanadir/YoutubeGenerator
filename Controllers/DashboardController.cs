@@ -15,15 +15,18 @@ namespace YoutubeGenerator.Controllers
     {
         private readonly IDashboardService _dashboardService;
         private readonly IProfileManagementService _profileService;
+        private readonly IRenderTrackerService _renderTracker;
         private readonly ILogger<DashboardController> _logger;
 
         public DashboardController(
             IDashboardService dashboardService,
             IProfileManagementService profileService,
+            IRenderTrackerService renderTracker,
             ILogger<DashboardController> logger)
         {
             _dashboardService = dashboardService;
             _profileService = profileService;
+            _renderTracker = renderTracker;
             _logger = logger;
         }
 
@@ -36,6 +39,176 @@ namespace YoutubeGenerator.Controllers
             bool isAuthenticated = User.Identity?.IsAuthenticated ?? false;
             var result = _dashboardService.GetOverview(isAuthenticated);
             return Ok(result);
+        }
+
+        // ============================================================================
+        // 1.1 LIVE MONTAGE RENDER TRACKING & STREAMING
+        // ============================================================================
+        [HttpGet("render-status")]
+        public IActionResult GetRenderStatus()
+        {
+            var snapshot = _renderTracker.GetSnapshot();
+            return Ok(snapshot);
+        }
+
+        [HttpGet("render-stream")]
+        public async Task GetRenderStream(CancellationToken cancellationToken)
+        {
+            Response.Headers.Append("Content-Type", "text/event-stream");
+            Response.Headers.Append("Cache-Control", "no-cache");
+            Response.Headers.Append("Connection", "keep-alive");
+
+            var serializerOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
+            try
+            {
+                await foreach (var state in _renderTracker.SubscribeAsync(cancellationToken))
+                {
+                    var json = JsonSerializer.Serialize(state, serializerOptions);
+                    await Response.WriteAsync($"data: {json}\n\n", cancellationToken);
+                    await Response.Body.FlushAsync(cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Client disconnected gracefully
+            }
+        }
+
+        [HttpPost("trigger-montage")]
+        public IActionResult TriggerMontage(
+            [FromServices] IServiceScopeFactory scopeFactory,
+            [FromServices] IWebHostEnvironment env)
+        {
+            // 1. Guard against overlapping active render sessions
+            var currentStatus = _renderTracker.GetSnapshot();
+            if (currentStatus.IsActive)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "A render process is already actively running. Please wait for it to complete."
+                });
+            }
+
+            // 2. Inspect bag_montage.json - strictly require Completed == true
+            string bagMontagePath = Path.Combine(env.ContentRootPath, "workspace", "bags", "bag_montage.json");
+            if (!System.IO.File.Exists(bagMontagePath))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Montage bag file (bag_montage.json) not found."
+                });
+            }
+
+            List<Models.MontageItem>? montageBag;
+            try
+            {
+                montageBag = Services.JsonFileService.Load<List<Models.MontageItem>>(bagMontagePath);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = $"Failed to read bag_montage.json: {ex.Message}"
+                });
+            }
+
+            if (montageBag == null || montageBag.Count == 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "bag_montage.json is empty. No packages available."
+                });
+            }
+
+            var readyPackage = montageBag.FirstOrDefault(p => p.Completed);
+            if (readyPackage == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Cannot trigger render: No montage package has 'Completed: true'. Render only executes when CollectWorker completes the target duration."
+                });
+            }
+
+            // 3. Launch MontageWorker for the verified completed package
+            _ = Task.Run(async () =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var montageWorker = scope.ServiceProvider.GetRequiredService<YoutubeGenerator.workers.MontageWorker>();
+                var youtubeWorker = scope.ServiceProvider.GetRequiredService<YoutubeGenerator.workers.YoutubeWorker>();
+                await montageWorker.RunAsync(CancellationToken.None);
+                await youtubeWorker.RunAsync();
+            });
+
+            return Ok(new
+            {
+                success = true,
+                message = $"Rendering launched for verified completed package #{readyPackage.MontageId.Substring(0, 8)}... ({readyPackage.Clips.Count} clips, {readyPackage.TotalDuration}).",
+                montageId = readyPackage.MontageId
+            });
+        }
+
+        [HttpPost("trigger-upload")]
+        public IActionResult TriggerUpload(
+            [FromServices] IServiceScopeFactory scopeFactory,
+            [FromServices] IWebHostEnvironment env)
+        {
+            string bagYoutubePath = Path.Combine(env.ContentRootPath, "workspace", "bags", "bag_youtube.json");
+            string bagYoutubeFailedPath = Path.Combine(env.ContentRootPath, "workspace", "bags", "bag_youtube_failed.json");
+
+            var youtubeBag = System.IO.File.Exists(bagYoutubePath)
+                ? Services.JsonFileService.Load<List<Models.MontageItem>>(bagYoutubePath)
+                : new List<Models.MontageItem>();
+
+            var failedBag = System.IO.File.Exists(bagYoutubeFailedPath)
+                ? Services.JsonFileService.Load<List<Models.MontageItem>>(bagYoutubeFailedPath)
+                : new List<Models.MontageItem>();
+
+            // Recover failed packages whose video still exists on disk if active queue is empty
+            if (youtubeBag.Count == 0 && failedBag.Count > 0)
+            {
+                var recoverable = failedBag
+                    .Where(p => !string.IsNullOrEmpty(p.FinalVideoPath) && System.IO.File.Exists(p.FinalVideoPath))
+                    .ToList();
+
+                if (recoverable.Count > 0)
+                {
+                    foreach (var rec in recoverable)
+                    {
+                        failedBag.Remove(rec);
+                        youtubeBag.Add(rec);
+                    }
+                    Services.JsonFileService.Save(bagYoutubePath, youtubeBag);
+                    Services.JsonFileService.Save(bagYoutubeFailedPath, failedBag);
+                }
+            }
+
+            if (youtubeBag.Count == 0)
+            {
+                return BadRequest(new { success = false, message = "No pending or recoverable packages found for upload." });
+            }
+
+            _ = Task.Run(async () =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var youtubeWorker = scope.ServiceProvider.GetRequiredService<YoutubeGenerator.workers.YoutubeWorker>();
+                await youtubeWorker.RunAsync();
+            });
+
+            return Ok(new
+            {
+                success = true,
+                message = $"Upload worker triggered for {youtubeBag.Count} pending package(s).",
+                packagesCount = youtubeBag.Count
+            });
         }
 
         // ============================================================================

@@ -42,6 +42,26 @@ namespace YoutubeGenerator.workers
             var bagDone = JsonFileService.Load<List<MontageItem>>(_bagYoutubeDone);
             var bagFailed = JsonFileService.Load<List<MontageItem>>(_bagYoutubeFailed);
 
+            // Auto-recover failed uploads if their rendered video file still exists on disk
+            if (bag.Count == 0 && bagFailed.Count > 0)
+            {
+                var recoverable = bagFailed
+                    .Where(x => !string.IsNullOrEmpty(x.FinalVideoPath) && File.Exists(x.FinalVideoPath))
+                    .ToList();
+
+                if (recoverable.Count > 0)
+                {
+                    _logger.LogInformation($"🔄 Auto-recovering {recoverable.Count} failed upload(s) whose video file exists on disk.");
+                    foreach (var item in recoverable)
+                    {
+                        bagFailed.Remove(item);
+                        bag.Add(item);
+                    }
+                    JsonFileService.Save(_bagYoutube, bag);
+                    JsonFileService.Save(_bagYoutubeFailed, bagFailed);
+                }
+            }
+
             if (bag.Count == 0)
                 return;
 

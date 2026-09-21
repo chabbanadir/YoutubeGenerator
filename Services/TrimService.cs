@@ -10,8 +10,12 @@ namespace YoutubeGenerator.Services
 {
     public class TrimService : ITrimService
     {
-        private readonly string _ffmpegPath =
-            @"C:\Users\nadir\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.0-full_build\bin\ffmpeg.exe";
+        private readonly IRenderTrackerService? _renderTracker;
+
+        public TrimService(IRenderTrackerService? renderTracker = null)
+        {
+            _renderTracker = renderTracker;
+        }
 
         private string NormalizeTime(string? input)
         {
@@ -110,6 +114,9 @@ namespace YoutubeGenerator.Services
             if (!File.Exists(firstClipPath))
                 throw new FileNotFoundException("First trimmed clip not found", firstClipPath);
 
+            _renderTracker?.SetStep(2, $"Stitching intro '{Path.GetFileName(introPath)}' with first clip");
+            _renderTracker?.AddLog($"[Intro] Prepending intro video: {Path.GetFileName(introPath)}", "step");
+
             try
             {
                 // 1. Create concat list
@@ -124,14 +131,31 @@ namespace YoutubeGenerator.Services
                     "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
                     $"\"{tempOutputPath}\"";
 
-                var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", args, workingDir);
+                _renderTracker?.AddLog($"[Intro] Concatenating intro with lead clip via FFmpeg...", "step");
+                var (exitCode, stdout, stderr) = await ProcessRunner.RunStreamingAsync(
+                    "ffmpeg", 
+                    args, 
+                    workingDir,
+                    onLine: line =>
+                    {
+                        if (line.Contains("Error", StringComparison.OrdinalIgnoreCase) || line.Contains("Failed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _renderTracker?.AddLog($"[Intro FFmpeg] ⚠️ {line.Trim()}", "warning");
+                        }
+                    });
 
                 if (exitCode != 0)
+                {
+                    _renderTracker?.AddLog($"[Intro] ❌ FFmpeg concat intro failed: {stderr}", "error");
                     throw new Exception($"FFmpeg concat intro failed: {stderr}");
+                }
 
                 // Replace clip0 with concatenated file
                 File.Delete(firstClipPath);
                 File.Move(tempOutputPath, firstClipPath);
+
+                _renderTracker?.UpdateStepProgress(2, 100, "Intro concatenated successfully");
+                _renderTracker?.AddLog($"[Intro] ✅ Lead clip successfully merged with channel intro", "success");
 
                 return true;
             }
@@ -143,6 +167,5 @@ namespace YoutubeGenerator.Services
                     try { File.Delete(tempOutputPath); } catch { }
             }
         }
-
     }
 }

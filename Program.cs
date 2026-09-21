@@ -40,6 +40,7 @@ builder.Services.AddScoped<IPathService, PathService>();
 builder.Services.AddScoped<IMontageProfileService, MontageProfileService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IProfileManagementService, ProfileManagementService>();
+builder.Services.AddSingleton<IRenderTrackerService, RenderTrackerService>();
 //builder.Services.AddScoped<VideoPipeline>();
 builder.Services.AddScoped<IYoutubeUploader, YoutubeUploader>();
 builder.Services.AddScoped<IYoutubeAuthService, YoutubeAuthService>();
@@ -56,6 +57,7 @@ builder.Services.AddScoped<YoutubeWorker>();
 // Cron = toujours Singleton
 builder.Services.AddHostedService<CronCollectService>();
 builder.Services.AddHostedService<CronMontageUploadService>();
+builder.Services.AddHostedService<CronTokenRefreshService>();
 
 // Authentication & Authorization
 builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme)
@@ -140,6 +142,29 @@ try
             w2.Status = false;
             JsonFileService.Save(montageFile, w2);
             app.Logger.LogInformation("🔄 Reset stale worker_montage status to false on startup.");
+        }
+    }
+
+    var youtubeFile = Path.Combine(bagsDir, "bag_youtube.json");
+    var youtubeFailedFile = Path.Combine(bagsDir, "bag_youtube_failed.json");
+    if (File.Exists(youtubeFailedFile))
+    {
+        var ytFailed = JsonFileService.Load<List<MontageItem>>(youtubeFailedFile);
+        var ytQueue = File.Exists(youtubeFile) ? JsonFileService.Load<List<MontageItem>>(youtubeFile) : new List<MontageItem>();
+        if (ytQueue.Count == 0 && ytFailed != null && ytFailed.Count > 0)
+        {
+            var recoverable = ytFailed.Where(p => !string.IsNullOrEmpty(p.FinalVideoPath) && File.Exists(p.FinalVideoPath)).ToList();
+            if (recoverable.Count > 0)
+            {
+                foreach (var r in recoverable)
+                {
+                    ytFailed.Remove(r);
+                    ytQueue.Add(r);
+                }
+                JsonFileService.Save(youtubeFile, ytQueue);
+                JsonFileService.Save(youtubeFailedFile, ytFailed);
+                app.Logger.LogInformation($"🔄 Startup recovery: moved {recoverable.Count} failed upload(s) back into bag_youtube.json.");
+            }
         }
     }
 }

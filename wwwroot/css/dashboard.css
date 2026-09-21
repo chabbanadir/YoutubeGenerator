@@ -15,6 +15,7 @@
 @import './components/bags.css';
 @import './components/modals.css';
 @import './components/json-editor.css';
+@import './components/renderTracker.css';
 
 /* Mobile & Responsive Rules */
 @import './mobile/responsive.css';
