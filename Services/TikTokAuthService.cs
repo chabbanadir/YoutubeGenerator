@@ -59,7 +59,7 @@ namespace YoutubeGenerator.Services
             }
 
             var encodedRedirect = Uri.EscapeDataString(redirectUri);
-            var scopes = "user.info.profile,video.publish";
+            var scopes = _config["TikTok:Scopes"] ?? "user.info.profile";
             return $"https://www.tiktok.com/v2/auth/authorize/?client_key={clientKey}&scope={scopes}&response_type=code&redirect_uri={encodedRedirect}&state={kindKey}";
         }
 
