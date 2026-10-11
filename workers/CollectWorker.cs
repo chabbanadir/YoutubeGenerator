@@ -32,6 +32,8 @@ namespace YoutubeGenerator.Workers
         private readonly string _bagHistory;
         private readonly MontageWorker _montageWorker;
         private readonly YoutubeWorker _youtubeWorker;
+        private readonly IShortsRenderService _shortsRender;
+        private readonly IShortsSchedulerService _shortsScheduler;
 
         private readonly int n;
 
@@ -48,7 +50,9 @@ namespace YoutubeGenerator.Workers
           IMontageProfileService profiels,
           IPathService pathService,
           MontageWorker montageWorker,
-          YoutubeWorker youtubeWorker)
+          YoutubeWorker youtubeWorker,
+          IShortsRenderService shortsRender,
+          IShortsSchedulerService shortsScheduler)
         {
             _pathService = pathService;
             _download = download;
@@ -61,6 +65,8 @@ namespace YoutubeGenerator.Workers
             _profiles = profiels;
             _montageWorker = montageWorker;
             _youtubeWorker = youtubeWorker;
+            _shortsRender = shortsRender;
+            _shortsScheduler = shortsScheduler;
 
             var cfgValue = cfg.Value;
             n = cfgValue.BatchSize;
@@ -243,6 +249,21 @@ namespace YoutubeGenerator.Workers
                             await _transition.GetVideoDurationAsync(trimResult.File);
 
                         trimBag.Add(trimResult);
+
+                        // ----------- STEP 2.5: DUAL-OUTPUT VERTICAL SHORT -----------
+                        try
+                        {
+                            var dirShorts = _pathService.GetShortsDir(clip.KindKey, clip.SubKindKey, _rootPath);
+                            var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description);
+                            if (!string.IsNullOrEmpty(shortPath))
+                            {
+                                await _shortsScheduler.QueueShortAsync(shortPath, clip, trimResult.Duration);
+                            }
+                        }
+                        catch (Exception exShort)
+                        {
+                            _logger.LogWarning(exShort, $"[Shorts] Failed to generate vertical short for {clip.Link}");
+                        }
 
                         downloadBag.RemoveAt(i);
 

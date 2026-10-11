@@ -44,6 +44,8 @@ builder.Services.AddSingleton<IRenderTrackerService, RenderTrackerService>();
 //builder.Services.AddScoped<VideoPipeline>();
 builder.Services.AddScoped<IYoutubeUploader, YoutubeUploader>();
 builder.Services.AddScoped<IThumbnailService, ThumbnailService>();
+builder.Services.AddScoped<IShortsRenderService, ShortsRenderService>();
+builder.Services.AddScoped<IShortsSchedulerService, ShortsSchedulerService>();
 builder.Services.AddScoped<IYoutubeAuthService, YoutubeAuthService>();
 builder.Services.AddScoped<IGitHubCsvFetcher, GitHubCsvFetcher>();
 builder.Services.Configure<CollectWorkerConfig>(
@@ -58,6 +60,7 @@ builder.Services.AddScoped<YoutubeWorker>();
 // Cron = toujours Singleton
 builder.Services.AddHostedService<CronCollectService>();
 builder.Services.AddHostedService<CronMontageUploadService>();
+builder.Services.AddHostedService<CronShortsUploadService>();
 builder.Services.AddHostedService<CronTokenRefreshService>();
 
 // Authentication & Authorization

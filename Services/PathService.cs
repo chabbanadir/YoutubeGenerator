@@ -1,4 +1,4 @@
-﻿using FluentResults;
+using FluentResults;
 using System.Runtime.InteropServices;
 using YoutubeGenerator.Interfaces;
 
@@ -23,6 +23,13 @@ namespace YoutubeGenerator.Services
         public string GetTrimDir(string kind, string subKind, string root)
         {
             var result = Path.Combine(root, "jobs", kind ?? "default", "trim", subKind ?? "default");
+            Directory.CreateDirectory(result);
+            return result;
+        }
+
+        public string GetShortsDir(string kind, string subKind, string root)
+        {
+            var result = Path.Combine(root, "jobs", kind ?? "default", "shorts", subKind ?? "default");
             Directory.CreateDirectory(result);
             return result;
         }

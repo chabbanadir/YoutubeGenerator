@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using YoutubeGenerator.workers;
 using YoutubeGenerator.Workers;
@@ -29,8 +29,8 @@ namespace YoutubeGenerator.crons
                
                 await collectWorker.RunAsync(stoppingToken); // appel du worker !
 
-                await Task.Delay(TimeSpan.FromHours(1), stoppingToken);
-                // await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                // Check for new clips in GitHub CSV every 1 minute
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
 
 
             }
