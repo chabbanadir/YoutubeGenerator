@@ -81,6 +81,143 @@ namespace YoutubeGenerator.Services
             }
         }
 
+        public async Task<string?> GenerateShortThumbnailAsync(
+            string shortVideoPath,
+            string kindKey,
+            string? streamerName = null,
+            string? subKindKey = null,
+            string? workingDir = null)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(shortVideoPath) || !File.Exists(shortVideoPath))
+                {
+                    _logger.LogWarning($"⚠️ No valid video source found to extract Short thumbnail: {shortVideoPath}");
+                    return null;
+                }
+
+                string outputDir = !string.IsNullOrEmpty(workingDir) && Directory.Exists(workingDir)
+                    ? workingDir
+                    : (Path.GetDirectoryName(shortVideoPath) ?? Path.Combine(_env.ContentRootPath, "workspace", "thumbnails"));
+                Directory.CreateDirectory(outputDir);
+
+                string baseName = Path.GetFileNameWithoutExtension(shortVideoPath);
+                string outputPath = Path.Combine(outputDir, $"thumb_{baseName}.jpg");
+
+                _logger.LogInformation($"🎨 Generating high-CTR 9:16 Short thumbnail for {baseName} ({kindKey}/{subKindKey})");
+
+                var kind = (kindKey ?? "lol").ToLowerInvariant();
+                var subKind = (subKindKey ?? "normal").ToLowerInvariant();
+                var streamer = (streamerName ?? "Streamer").Trim().TrimStart('@');
+
+                // Resolve Game Badge
+                string badgesDir = Path.Combine(_assetsRoot, "badges");
+                string? badgePath = null;
+                if (kind.Contains("val"))
+                {
+                    string aceBadge = Path.Combine(badgesDir, "ace.png");
+                    string radiantBadge = Path.Combine(badgesDir, "radiant_badge.png");
+                    badgePath = File.Exists(aceBadge) ? aceBadge : (File.Exists(radiantBadge) ? radiantBadge : null);
+                }
+                else
+                {
+                    string pentaBadge = Path.Combine(badgesDir, "pentakill.png");
+                    string challengerIcon = Path.Combine(badgesDir, "challenger_icon.png");
+                    badgePath = File.Exists(pentaBadge) ? pentaBadge : (File.Exists(challengerIcon) ? challengerIcon : null);
+                }
+
+                // Resolve Font
+                string fontsDir = Path.Combine(_assetsRoot, "fonts");
+                string beaufortFont = Path.Combine(fontsDir, "beaufort_heavy.otf");
+                string boldFont = Path.Combine(fontsDir, "font_bold.ttf");
+                string fontPath = (kind.Contains("lol") && File.Exists(beaufortFont))
+                    ? beaufortFont
+                    : (File.Exists(boldFont) ? boldFont : "Arial");
+
+                // Resolve Like & Subscribe sticker
+                string overlaysDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "overlays");
+                string likeSubscribePath = Path.Combine(overlaysDir, "like_subscribe.png");
+
+                // Hook phrase
+                string hookText = kind.Contains("val")
+                    ? (subKind.Contains("ace") ? "RADIANT 1v5?!" : "HOW IS HE REAL?!")
+                    : (subKind.Contains("penta") ? "PENTAKILL?!" : "1000 IQ PLAY?!");
+
+                // Build FFmpeg command for 9:16 Vertical Thumbnail
+                var inputs = new List<string>
+                {
+                    $"-ss 00:00:03 -i \"{shortVideoPath}\""
+                };
+
+                int nextIdx = 1;
+                int? badgeIdx = null;
+                int? likeSubIdx = null;
+
+                if (!string.IsNullOrEmpty(badgePath) && File.Exists(badgePath))
+                {
+                    inputs.Add($"-i \"{badgePath}\"");
+                    badgeIdx = nextIdx++;
+                }
+
+                if (File.Exists(likeSubscribePath))
+                {
+                    inputs.Add($"-i \"{likeSubscribePath}\"");
+                    likeSubIdx = nextIdx++;
+                }
+
+                var filter = new List<string>();
+                // Base 9:16 frame with rich contrast and saturation
+                filter.Add("[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=contrast=1.12:saturation=1.25[bg]");
+                string currentLayer = "[bg]";
+
+                string escapedFont = fontPath.Replace("\\", "/").Replace(":", "\\:");
+                string escapedStreamer = streamer.Replace("'", "\\'").Replace(":", "\\:").Replace("%", "\\%");
+                string escapedHook = hookText.Replace("'", "\\'").Replace(":", "\\:").Replace("%", "\\%");
+
+                // Top focal element (Badge + Streamer tag OR Hook text + Streamer tag)
+                if (badgeIdx.HasValue)
+                {
+                    filter.Add($"[{badgeIdx.Value}:v]scale=460:-1[badge]");
+                    filter.Add($"{currentLayer}[badge]overlay=(W-w)/2:140[l_badge]");
+                    filter.Add($"[l_badge]drawtext=fontfile='{escapedFont}':text='@{escapedStreamer}':fontcolor=white:fontsize=46:borderw=6:bordercolor=black:x=(w-text_w)/2:y=380[l_top]");
+                    currentLayer = "[l_top]";
+                }
+                else
+                {
+                    filter.Add($"{currentLayer}drawtext=fontfile='{escapedFont}':text='{escapedHook}':fontcolor=0xFFE600:fontsize=90:borderw=9:bordercolor=black:x=(w-text_w)/2:y=180,drawtext=fontfile='{escapedFont}':text='@{escapedStreamer}':fontcolor=white:fontsize=46:borderw=6:bordercolor=black:x=(w-text_w)/2:y=310[l_top]");
+                    currentLayer = "[l_top]";
+                }
+
+                // Bottom Call-to-Action sticker (Like & Subscribe banner)
+                if (likeSubIdx.HasValue)
+                {
+                    filter.Add($"[{likeSubIdx.Value}:v]scale=740:-1[sub]");
+                    filter.Add($"{currentLayer}[sub]overlay=(W-w)/2:1500[out]");
+                    currentLayer = "[out]";
+                }
+
+                string filterComplex = string.Join(";", filter);
+                string inputArgs = string.Join(" ", inputs);
+                string ffmpegArgs = $"-y {inputArgs} -filter_complex \"{filterComplex}\" -map \"{currentLayer}\" -vframes 1 -q:v 2 \"{outputPath}\"";
+
+                var (code, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", ffmpegArgs, outputDir);
+
+                if (code != 0 || !File.Exists(outputPath))
+                {
+                    _logger.LogWarning($"⚠️ FFmpeg Short thumbnail generation failed (exit code {code}): {stderr}");
+                    return null;
+                }
+
+                _logger.LogInformation($"✅ Generated high-CTR 9:16 Short thumbnail: {outputPath} ({new FileInfo(outputPath).Length / 1024} KB)");
+                return outputPath;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"❌ Unexpected error while generating Short thumbnail for {shortVideoPath}");
+                return null;
+            }
+        }
+
         private string ResolveOutputDir(MontageItem package, string? workingDir)
         {
             if (!string.IsNullOrEmpty(workingDir) && Directory.Exists(workingDir))

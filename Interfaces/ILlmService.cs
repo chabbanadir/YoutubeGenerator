@@ -1,4 +1,4 @@
-﻿using YoutubeGenerator.Models;
+using YoutubeGenerator.Models;
 
 namespace YoutubeGenerator.Interfaces
 {
@@ -8,5 +8,11 @@ namespace YoutubeGenerator.Interfaces
             MontageItem package,
             MontageProfile profile
             );
+
+        Task<MontageLLMResult> GenerateShortMetadataAsync(
+            string kindKey,
+            string subKindKey,
+            string streamerName,
+            string? clipTitle = null);
     }
 }

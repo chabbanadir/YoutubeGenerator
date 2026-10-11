@@ -15,6 +15,8 @@ namespace YoutubeGenerator.Services
         private readonly ILogger<ShortsSchedulerService> _logger;
         private readonly IMontageProfileService _profileService;
         private readonly IYoutubeUploader _uploader;
+        private readonly ILlmService _llmService;
+        private readonly IThumbnailService _thumbnailService;
         private readonly string _bagShorts;
         private static readonly object _fileLock = new();
 
@@ -22,11 +24,15 @@ namespace YoutubeGenerator.Services
             IWebHostEnvironment env,
             ILogger<ShortsSchedulerService> logger,
             IMontageProfileService profileService,
-            IYoutubeUploader uploader)
+            IYoutubeUploader uploader,
+            ILlmService llmService,
+            IThumbnailService thumbnailService)
         {
             _logger = logger;
             _profileService = profileService;
             _uploader = uploader;
+            _llmService = llmService;
+            _thumbnailService = thumbnailService;
 
             string bagsDir = Path.Combine(env.ContentRootPath, "workspace", "bags");
             Directory.CreateDirectory(bagsDir);
@@ -42,48 +48,36 @@ namespace YoutubeGenerator.Services
             var subKind = (clip.SubKindKey ?? "normal").Trim().ToLowerInvariant();
             var streamer = (clip.Description ?? "Streamer").Trim().TrimStart('@');
 
-            // Format viral Short title and description
-            string title;
-            string gameTag;
-            if (kind == "valorant")
+            // Generate viral Short title, description, and tags via LLM
+            _logger.LogInformation($"🤖 Generating AI metadata via LLM for Short ({kind}/{subKind}, Streamer: @{streamer})");
+            var meta = await _llmService.GenerateShortMetadataAsync(kind, subKind, streamer, clip.Title);
+
+            string title = meta.Title;
+            string description = meta.Description;
+            var tags = meta.Tags ?? new List<string> { "Shorts", "YouTube Shorts", $"{kind} Shorts", streamer, "Gaming" };
+
+            // Ensure 9:16 Short thumbnail exists
+            string dir = Path.GetDirectoryName(shortFilePath) ?? "";
+            string baseName = Path.GetFileNameWithoutExtension(shortFilePath);
+            string thumbPath = Path.Combine(dir, $"thumb_{baseName}.jpg");
+
+            if (!File.Exists(thumbPath))
             {
-                title = subKind.Contains("ace")
-                    ? $"RADIANT 1v5 ACE by @{streamer} 🎯 #Shorts #VALORANT"
-                    : $"INSANE 200 IQ PLAY by @{streamer} 🔥 #Shorts #VALORANT";
-                gameTag = "VALORANT";
+                try
+                {
+                    await _thumbnailService.GenerateShortThumbnailAsync(shortFilePath, kind, streamer, subKind, dir);
+                }
+                catch (Exception exThumb)
+                {
+                    _logger.LogWarning(exThumb, $"[ShortsScheduler] Could not generate thumbnail for {shortFilePath}");
+                }
             }
-            else
-            {
-                title = subKind.Contains("penta")
-                    ? $"INSANE PENTAKILL by @{streamer} 💥 #Shorts #LoL"
-                    : $"INSANE OUTPLAY by @{streamer} 🔥 #Shorts #LoL";
-                gameTag = "LeagueOfLegends";
-            }
-
-            if (title.Length > 95)
-                title = title.Substring(0, 92) + "...";
-
-            string description =
-                $"Incredible play by @{streamer}!\n\n" +
-                $"Subscribe for daily {gameTag} highlights and shorts!\n\n" +
-                $"#Shorts #{gameTag} #Gaming #Clips #Highlights";
-
-            var tags = new List<string>
-            {
-                "Shorts",
-                "YouTube Shorts",
-                $"{gameTag} Shorts",
-                $"{gameTag} Clips",
-                $"{gameTag} Highlights",
-                streamer,
-                "Gaming"
-            };
 
             lock (_fileLock)
             {
                 var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
 
-                // Calculate 20-minute rolling cadence
+                // Calculate 10-minute rolling cadence
                 DateTime nextSlot;
                 var latestPending = bag
                     .Where(s => !s.IsUploaded)
@@ -92,11 +86,11 @@ namespace YoutubeGenerator.Services
 
                 if (latestPending != null && latestPending.ScheduledPublishTime > DateTime.UtcNow)
                 {
-                    nextSlot = latestPending.ScheduledPublishTime.AddMinutes(20);
+                    nextSlot = latestPending.ScheduledPublishTime.AddMinutes(10);
                 }
                 else
                 {
-                    nextSlot = DateTime.UtcNow.AddMinutes(10);
+                    nextSlot = DateTime.UtcNow.AddMinutes(5);
                 }
 
                 var item = new ShortItem
@@ -108,6 +102,7 @@ namespace YoutubeGenerator.Services
                     Description = description,
                     Tags = tags,
                     FilePath = shortFilePath,
+                    ThumbnailPath = File.Exists(thumbPath) ? thumbPath : null,
                     DurationSeconds = durationSeconds,
                     ScheduledPublishTime = nextSlot,
                     IsUploaded = false
@@ -116,7 +111,7 @@ namespace YoutubeGenerator.Services
                 bag.Add(item);
                 JsonFileService.Save(_bagShorts, bag);
 
-                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +20m cadence)");
+                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +10m cadence)");
                 return item;
             }
         }
@@ -153,6 +148,19 @@ namespace YoutubeGenerator.Services
                 {
                     _logger.LogInformation($"✅ [ShortsScheduler] Short uploaded successfully: Video ID = {videoId}");
 
+                    // Set thumbnail if generated
+                    if (!string.IsNullOrEmpty(nextShort.ThumbnailPath) && File.Exists(nextShort.ThumbnailPath))
+                    {
+                        try
+                        {
+                            await _uploader.SetThumbnailAsync(videoId, nextShort.ThumbnailPath, creds);
+                        }
+                        catch (Exception exThumb)
+                        {
+                            _logger.LogWarning(exThumb, $"[ShortsScheduler] Could not set custom thumbnail for Short {videoId}");
+                        }
+                    }
+
                     lock (_fileLock)
                     {
                         var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
@@ -165,13 +173,17 @@ namespace YoutubeGenerator.Services
                         }
                     }
 
-                    // Clean up local short file to conserve disk space
+                    // Clean up local short file and thumbnail to conserve disk space
                     try
                     {
                         if (File.Exists(nextShort.FilePath))
                         {
                             File.Delete(nextShort.FilePath);
                             _logger.LogInformation($"[ShortsScheduler] Cleaned up rendered short video: {nextShort.FilePath}");
+                        }
+                        if (!string.IsNullOrEmpty(nextShort.ThumbnailPath) && File.Exists(nextShort.ThumbnailPath))
+                        {
+                            File.Delete(nextShort.ThumbnailPath);
                         }
                     }
                     catch { }

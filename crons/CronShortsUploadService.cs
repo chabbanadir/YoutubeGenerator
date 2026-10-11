@@ -49,8 +49,8 @@ namespace YoutubeGenerator.crons
                     _logger.LogWarning(ex, "[CronShorts] Error in shorts processing cycle.");
                 }
 
-                // Check for new queued shorts every 5 minutes
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                // Check for new queued shorts every 1 minute
+                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
     }

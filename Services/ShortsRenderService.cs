@@ -13,20 +13,24 @@ namespace YoutubeGenerator.Services
     {
         private readonly ILogger<ShortsRenderService> _logger;
         private readonly IWebHostEnvironment _env;
+        private readonly IThumbnailService _thumbnailService;
 
         public ShortsRenderService(
             ILogger<ShortsRenderService> logger,
-            IWebHostEnvironment env)
+            IWebHostEnvironment env,
+            IThumbnailService thumbnailService)
         {
             _logger = logger;
             _env = env;
+            _thumbnailService = thumbnailService;
         }
 
         public async Task<string?> GenerateShortAsync(
             string inputVideoPath,
             string outputDir,
             string kindKey,
-            string? streamerName = null)
+            string? streamerName = null,
+            string? subKindKey = null)
         {
             if (string.IsNullOrEmpty(inputVideoPath) || !File.Exists(inputVideoPath))
             {
@@ -42,15 +46,33 @@ namespace YoutubeGenerator.Services
 
             try
             {
+                string? renderedPath = null;
                 if (kind == "valorant")
                 {
-                    return await RenderValorantShortAsync(inputVideoPath, outputPath, streamerName);
+                    renderedPath = await RenderValorantShortAsync(inputVideoPath, outputPath, streamerName);
                 }
                 else
                 {
                     // Default / LoL: Ambient Blurred Background
-                    return await RenderAmbientBlurShortAsync(inputVideoPath, outputPath);
+                    renderedPath = await RenderAmbientBlurShortAsync(inputVideoPath, outputPath);
                 }
+
+                if (!string.IsNullOrEmpty(renderedPath) && File.Exists(renderedPath))
+                {
+                    // Auto-generate matching 9:16 high-CTR thumbnail during the rendering process
+                    try
+                    {
+                        await _thumbnailService.GenerateShortThumbnailAsync(renderedPath, kind, streamerName, subKindKey, outputDir);
+                    }
+                    catch (Exception exThumb)
+                    {
+                        _logger.LogWarning(exThumb, $"[Shorts] Could not auto-generate thumbnail for {renderedPath}");
+                    }
+
+                    return renderedPath;
+                }
+
+                return null;
             }
             catch (Exception ex)
             {
@@ -63,13 +85,35 @@ namespace YoutubeGenerator.Services
         {
             _logger.LogInformation($"[Shorts] Rendering Ambient Blur 9:16 Short -> {outputPath}");
 
-            string filterComplex =
-                "[0:v]scale=1920:1080,split=2[n1][n2];" +
-                "[n1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5,eq=brightness=-0.1:saturation=1.2[bg];" +
-                "[n2]scale=1080:608[fg];" +
-                "[bg][fg]overlay=0:(1920-608)/2[v]";
+            string overlaysDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "overlays");
+            string likeSubscribePath = Path.Combine(overlaysDir, "like_subscribe.png");
+            bool hasOverlay = File.Exists(likeSubscribePath);
 
-            string args = $"-y -i \"{inputVideoPath}\" -filter_complex \"{filterComplex}\" " +
+            string filterComplex;
+            string inputArgs;
+
+            if (hasOverlay)
+            {
+                inputArgs = $"-y -i \"{inputVideoPath}\" -i \"{likeSubscribePath}\"";
+                filterComplex =
+                    "[0:v]scale=1920:1080,split=2[n1][n2];" +
+                    "[n1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5,eq=brightness=-0.1:saturation=1.2[bg];" +
+                    "[n2]scale=1080:608[fg];" +
+                    "[bg][fg]overlay=0:(1920-608)/2[v1];" +
+                    "[1:v]scale=680:-1[sub];" +
+                    "[v1][sub]overlay=(W-w)/2:1500[v]";
+            }
+            else
+            {
+                inputArgs = $"-y -i \"{inputVideoPath}\"";
+                filterComplex =
+                    "[0:v]scale=1920:1080,split=2[n1][n2];" +
+                    "[n1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5,eq=brightness=-0.1:saturation=1.2[bg];" +
+                    "[n2]scale=1080:608[fg];" +
+                    "[bg][fg]overlay=0:(1920-608)/2[v]";
+            }
+
+            string args = $"{inputArgs} -filter_complex \"{filterComplex}\" " +
                           $"-map \"[v]\" -map 0:a? -c:v libx264 -preset veryfast -crf 22 -c:a aac -b:a 192k -movflags +faststart \"{outputPath}\"";
 
             bool success = await RunFfmpegCommandAsync(args);
@@ -103,14 +147,37 @@ namespace YoutubeGenerator.Services
 
         private async Task<string?> RenderStackedValorantShortAsync(string inputVideoPath, string outputPath, WebcamCoordinates coords)
         {
-            string filterComplex =
-                $"[0:v]scale=1920:1080[norm];" +
-                $"[norm]split=2[n1][n2];" +
-                $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680[cam];" +
-                $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
-                $"[cam][game]vstack=inputs=2,drawbox=y=676:color=0x0f1923:t=8[v]";
+            string overlaysDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "overlays");
+            string likeSubscribePath = Path.Combine(overlaysDir, "like_subscribe.png");
+            bool hasOverlay = File.Exists(likeSubscribePath);
 
-            string args = $"-y -i \"{inputVideoPath}\" -filter_complex \"{filterComplex}\" " +
+            string filterComplex;
+            string inputArgs;
+
+            if (hasOverlay)
+            {
+                inputArgs = $"-y -i \"{inputVideoPath}\" -i \"{likeSubscribePath}\"";
+                filterComplex =
+                    $"[0:v]scale=1920:1080[norm];" +
+                    $"[norm]split=2[n1][n2];" +
+                    $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680[cam];" +
+                    $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
+                    $"[cam][game]vstack=inputs=2,drawbox=y=676:color=0x0f1923:t=8[v1];" +
+                    $"[1:v]scale=680:-1[sub];" +
+                    $"[v1][sub]overlay=(W-w)/2:1500[v]";
+            }
+            else
+            {
+                inputArgs = $"-y -i \"{inputVideoPath}\"";
+                filterComplex =
+                    $"[0:v]scale=1920:1080[norm];" +
+                    $"[norm]split=2[n1][n2];" +
+                    $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680[cam];" +
+                    $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
+                    $"[cam][game]vstack=inputs=2,drawbox=y=676:color=0x0f1923:t=8[v]";
+            }
+
+            string args = $"{inputArgs} -filter_complex \"{filterComplex}\" " +
                           $"-map \"[v]\" -map 0:a? -c:v libx264 -preset veryfast -crf 22 -c:a aac -b:a 192k -movflags +faststart \"{outputPath}\"";
 
             bool success = await RunFfmpegCommandAsync(args);

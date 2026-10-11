@@ -95,6 +95,102 @@ namespace YoutubeGenerator.Services
             return result;
         }
 
+        public async Task<MontageLLMResult> GenerateShortMetadataAsync(
+            string kindKey,
+            string subKindKey,
+            string streamerName,
+            string? clipTitle = null)
+        {
+            var result = new MontageLLMResult();
+            var cleanStreamer = (streamerName ?? "Streamer").Trim().TrimStart('@');
+            var isVal = (kindKey ?? "").ToLower().Contains("val");
+            var gameName = isVal ? "VALORANT" : "League of Legends";
+            var gameHashtag = isVal ? "VALORANT" : "LoL";
+
+            var lockAcquired = false;
+            try
+            {
+                lockAcquired = await _rateLimiter.WaitAsync(TimeSpan.FromSeconds(10));
+
+                var prompt = $@"You are a YouTube Shorts viral algorithm optimizer specializing in gaming clips.
+Generate high-CTR, viral metadata for a 9:16 vertical YouTube Short clip.
+
+Game: {gameName}
+Category / Play: {subKindKey}
+Featured Streamer: @{cleanStreamer}
+Original Clip Title: {(string.IsNullOrWhiteSpace(clipTitle) ? "Epic Play" : clipTitle)}
+
+RULES:
+1. Title:
+   - Must be ultra-catchy, dramatic, click-worthy, and under 90 characters.
+   - Include 1-2 gaming emojis (e.g. 💥, 🔥, 🎯, 💀).
+   - Mention @{cleanStreamer}.
+   - MUST end with hashtags '#Shorts #{gameHashtag}'.
+2. Description:
+   - 2 to 4 concise, engaging lines.
+   - Credit streamer: 'Clip featuring @{cleanStreamer} on Twitch'.
+   - Include an engagement hook (e.g. 'Did you expect that play? Rate 1-10 in the comments! 👇').
+   - Call to action: 'Like & Subscribe for daily {gameHashtag} highlights!'.
+   - Include relevant hashtags: #Shorts #{gameHashtag} #Gaming #Clips #Outplay.
+3. Tags:
+   - Array of 6 to 10 viral tags (e.g. [""Shorts"", ""{gameHashtag} Shorts"", ""{cleanStreamer}"", ...]).
+
+RETURN ONLY RAW JSON conforming to:
+{{
+  ""title"": ""string"",
+  ""description"": ""string"",
+  ""tags"": [""string""]
+}}";
+
+                var rawResponse = await ExecuteLlmRequestWithFallbackAsync(prompt);
+                var jsonText = ExtractJson(rawResponse);
+
+                var metadata = JsonSerializer.Deserialize<MetadataResponse>(jsonText, _jsonOptions);
+
+                if (metadata != null && !string.IsNullOrWhiteSpace(metadata.Title))
+                {
+                    result.Title = CleanTitle(metadata.Title);
+                    if (!result.Title.Contains("#Shorts", StringComparison.OrdinalIgnoreCase))
+                    {
+                        result.Title = $"{result.Title} #Shorts";
+                    }
+                    if (result.Title.Length > 95)
+                    {
+                        result.Title = result.Title.Substring(0, 92) + "...";
+                    }
+
+                    result.Description = metadata.Description;
+                    result.Tags = (metadata.Tags != null && metadata.Tags.Any())
+                        ? metadata.Tags
+                        : new List<string> { "Shorts", "YouTube Shorts", $"{gameHashtag} Shorts", cleanStreamer, "Gaming" };
+
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LlmService] Error generating Shorts metadata via LLM: {ex.Message}");
+            }
+            finally
+            {
+                if (lockAcquired)
+                {
+                    _rateLimiter.Release();
+                }
+            }
+
+            // High-CTR Dynamic Fallback
+            string fallbackTitle = isVal
+                ? (subKindKey.ToLower().Contains("ace") ? $"RADIANT 1v5 ACE by @{cleanStreamer} 🎯 #Shorts #VALORANT" : $"INSANE 200 IQ PLAY by @{cleanStreamer} 🔥 #Shorts #VALORANT")
+                : (subKindKey.ToLower().Contains("penta") ? $"INSANE PENTAKILL by @{cleanStreamer} 💥 #Shorts #LoL" : $"INSANE OUTPLAY by @{cleanStreamer} 🔥 #Shorts #LoL");
+
+            result.Title = fallbackTitle;
+            result.Description = $"Incredible play by @{cleanStreamer}!\n\nRate this play in comments 👇\nLike and subscribe for daily {gameName} shorts!\n\n#Shorts #{gameHashtag} #Gaming #Clips #Highlights";
+            result.Tags = new List<string> { "Shorts", "YouTube Shorts", $"{gameHashtag} Shorts", $"{gameHashtag} Clips", cleanStreamer, "Gaming" };
+
+            return result;
+        }
+
         private async Task<string> ExecuteLlmRequestWithFallbackAsync(string prompt)
         {
             var modelsToTry = new List<string>
@@ -534,5 +630,6 @@ namespace YoutubeGenerator.Services
     {
         public string Title { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public List<string>? Tags { get; set; }
     }
 }

@@ -256,7 +256,7 @@ namespace YoutubeGenerator.Workers
                             try
                             {
                                 var dirShorts = _pathService.GetShortsDir(clip.KindKey, clip.SubKindKey, _rootPath);
-                                var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description);
+                                var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description, clip.SubKindKey);
                                 if (!string.IsNullOrEmpty(shortPath))
                                 {
                                     await _shortsScheduler.QueueShortAsync(shortPath, clip, trimResult.Duration);
