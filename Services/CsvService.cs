@@ -1,4 +1,4 @@
-﻿using CsvHelper;
+using CsvHelper;
 using CsvHelper.Configuration;
 using System.Globalization;
 using YoutubeGenerator.Interfaces;
@@ -16,7 +16,9 @@ namespace YoutubeGenerator.Services
             {
                 TrimOptions = TrimOptions.Trim,
                 IgnoreBlankLines = true,
-                PrepareHeaderForMatch = args => args.Header.ToLower(),   // 👌 Case-insensitive matching
+                HeaderValidated = null,
+                MissingFieldFound = null,
+                PrepareHeaderForMatch = args => args.Header.ToLower().Replace("_", "").Replace(" ", ""),
             };
 
             using var csv = new CsvReader(reader, config);
@@ -29,18 +31,26 @@ namespace YoutubeGenerator.Services
                 if (string.IsNullOrWhiteSpace(rec.Link))
                     continue;
 
+                bool isShort = false;
+                if (!string.IsNullOrWhiteSpace(rec.IsShort))
+                {
+                    var val = rec.IsShort.Trim().ToLowerInvariant();
+                    isShort = val == "true" || val == "1" || val == "yes" || val == "short";
+                }
+
                 var clip = new ClipInfo
                 {
                     Link = rec.Link?.Trim(),
                     Description = rec.Description?.Trim(),
                     Start = rec.Start,
                     End = rec.End,
-                    KindKey = rec.KindKey,
-                    SubKindKey = rec.SubKindKey
+                    KindKey = rec.KindKey ?? "default",
+                    SubKindKey = rec.SubKindKey ?? "default",
+                    IsShort = isShort
                 };
 
                 Console.WriteLine(
-                    $"CSV: Url={clip.Link}, Start={clip.Start}, End={clip.End}, KindKey={clip.KindKey}, SubKindKey={clip.SubKindKey}"
+                    $"CSV: Url={clip.Link}, Start={clip.Start}, End={clip.End}, KindKey={clip.KindKey}, SubKindKey={clip.SubKindKey}, IsShort={clip.IsShort}"
                 );
 
                 records.Add(clip);
@@ -49,15 +59,36 @@ namespace YoutubeGenerator.Services
             return records;
         }
 
-        // ⚠ MUST MATCH THE CSV HEADER EXACTLY (case-insensitive is now allowed)
+        // ⚠ Flexible mapping to support both 'Kind' and 'KindKey', 'IsShort' or 'Short'
         private class RawCsvRecord
         {
+            [CsvHelper.Configuration.Attributes.Name("link", "url")]
+            [CsvHelper.Configuration.Attributes.Optional]
             public string? Link { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("description", "desc", "title")]
+            [CsvHelper.Configuration.Attributes.Optional]
             public string? Description { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("start")]
+            [CsvHelper.Configuration.Attributes.Optional]
             public string? Start { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("end")]
+            [CsvHelper.Configuration.Attributes.Optional]
             public string? End { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("kind", "kindkey", "game")]
+            [CsvHelper.Configuration.Attributes.Optional]
             public string? KindKey { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("subkind", "subkindkey", "streamer")]
+            [CsvHelper.Configuration.Attributes.Optional]
             public string? SubKindKey { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("isshort", "short")]
+            [CsvHelper.Configuration.Attributes.Optional]
+            public string? IsShort { get; set; }
         }
     }
 }

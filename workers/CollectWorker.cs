@@ -250,19 +250,22 @@ namespace YoutubeGenerator.Workers
 
                         trimBag.Add(trimResult);
 
-                        // ----------- STEP 2.5: DUAL-OUTPUT VERTICAL SHORT -----------
-                        try
+                        // ----------- STEP 2.5: OPTIONAL VERTICAL SHORT (Selective Clip) -----------
+                        if (clip.IsShort)
                         {
-                            var dirShorts = _pathService.GetShortsDir(clip.KindKey, clip.SubKindKey, _rootPath);
-                            var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description);
-                            if (!string.IsNullOrEmpty(shortPath))
+                            try
                             {
-                                await _shortsScheduler.QueueShortAsync(shortPath, clip, trimResult.Duration);
+                                var dirShorts = _pathService.GetShortsDir(clip.KindKey, clip.SubKindKey, _rootPath);
+                                var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description);
+                                if (!string.IsNullOrEmpty(shortPath))
+                                {
+                                    await _shortsScheduler.QueueShortAsync(shortPath, clip, trimResult.Duration);
+                                }
                             }
-                        }
-                        catch (Exception exShort)
-                        {
-                            _logger.LogWarning(exShort, $"[Shorts] Failed to generate vertical short for {clip.Link}");
+                            catch (Exception exShort)
+                            {
+                                _logger.LogWarning(exShort, $"[Shorts] Failed to generate vertical short for {clip.Link}");
+                            }
                         }
 
                         downloadBag.RemoveAt(i);

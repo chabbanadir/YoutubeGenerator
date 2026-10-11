@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace YoutubeGenerator.Models
 {
@@ -21,6 +21,9 @@ namespace YoutubeGenerator.Models
 
         [JsonPropertyName("SubKindKey")]
         public string SubKindKey { get; set; } = "default";
+
+        [JsonPropertyName("IsShort")]
+        public bool IsShort { get; set; } = false;
 
         public DateTime? ImportedAt { get; set; } = DateTime.UtcNow;
 
