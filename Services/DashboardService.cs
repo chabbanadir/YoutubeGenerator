@@ -143,6 +143,12 @@ namespace YoutubeGenerator.Services
                         if (uProp.TryGetProperty("MinDelayHours", out var mProp) && mProp.TryGetInt32(out var md)) minDelayHours = md;
                         if (uProp.TryGetProperty("LastUploadTime", out var lProp) && lProp.TryGetDateTime(out var lu)) lastUploadTime = lu;
                         if (uProp.TryGetProperty("UploadCounter", out var ucProp) && ucProp.TryGetInt32(out var uc)) uploadCounter = uc;
+                    bool isTikTokConnected = false;
+                    string tikTokDisplayName = "";
+                    if (root.TryGetProperty("TikTokConfig", out var ttProp) && ttProp.ValueKind == JsonValueKind.Object)
+                    {
+                        if (ttProp.TryGetProperty("Connected", out var ttConn)) isTikTokConnected = ttConn.GetBoolean();
+                        if (ttProp.TryGetProperty("DisplayName", out var ttName)) tikTokDisplayName = ttName.GetString() ?? "";
                     }
 
                     channels.Add(new
@@ -152,6 +158,8 @@ namespace YoutubeGenerator.Services
                         channelId = channelId,
                         channelTitle = channelTitle,
                         isConnected = isConnected,
+                        isTikTokConnected = isTikTokConnected,
+                        tikTokDisplayName = tikTokDisplayName,
                         enabled = enabled,
                         minDelayHours = minDelayHours,
                         lastUploadTime = lastUploadTime,

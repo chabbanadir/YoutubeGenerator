@@ -1,5 +1,5 @@
 // Game Kinds Management Module
-import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth, getApiUrl, getYoutubeIcon } from '../core/api.js';
+import { state, showToast, escapeHtml, escapeJsString, formatDate, fetchWithAuth, getApiUrl, getYoutubeIcon, getTiktokIcon } from '../core/api.js';
 
 export function renderKindsGrid(kinds, callbacks = {}) {
   const container = document.getElementById('kindsGrid');
@@ -30,6 +30,10 @@ export function renderKindsGrid(kinds, callbacks = {}) {
     const channelTitle = data.YoutubeChannelTitle || '';
     const channelId = data.YoutubeChannelId || '';
     const safeKindKey = escapeJsString(kindKey);
+
+    const tikTokCfg = data.TikTokConfig || {};
+    const isTikTokConnected = tikTokCfg.Connected === true;
+    const tikTokDisplayName = tikTokCfg.DisplayName || '';
 
     return `
       <div class="profile-card" data-kind-file="${escapedFileName}" style="border-top: 3px solid ${topAccentColor};">
@@ -140,7 +144,8 @@ export function renderKindsGrid(kinds, callbacks = {}) {
           </div>
         </div>
 
-        <div class="profile-section" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.5rem 0.75rem;">
+        <!-- YouTube Connection Row -->
+        <div class="profile-section" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(0,0,0,0.25); padding: 0.45rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
           ${hasRefreshToken ? `
             <div style="font-size: 0.78rem; color: #34d399; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
               <i data-lucide="shield-check" style="width: 14px; height: 14px;"></i> YouTube Linked & Ready
@@ -150,10 +155,29 @@ export function renderKindsGrid(kinds, callbacks = {}) {
             </button>
           ` : `
             <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="alert-circle" style="width: 14px; height: 14px; color: #f59e0b;"></i> Unlinked Channel
+              <i data-lucide="alert-circle" style="width: 14px; height: 14px; color: #f59e0b;"></i> Unlinked YouTube
             </div>
-            <button type="button" class="btn-youtube-connect" style="background: #ef4444; color: white; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.85rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.02em;" onclick="window.connectYoutubeChannel('${safeKindKey}')" title="Link YouTube channel via Google OAuth">
-              ${getYoutubeIcon(16, 'margin-right: 4px;')} CONNECT YOUTUBE
+            <button type="button" class="btn-youtube-connect" style="background: #ef4444; color: white; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.45rem 0.75rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); text-transform: uppercase; font-size: 0.76rem; letter-spacing: 0.02em;" onclick="window.connectYoutubeChannel('${safeKindKey}')" title="Link YouTube channel via Google OAuth">
+              ${getYoutubeIcon(15, 'margin-right: 4px;')} CONNECT YOUTUBE
+            </button>
+          `}
+        </div>
+
+        <!-- TikTok Connection Row -->
+        <div class="profile-section" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.45rem 0.75rem;">
+          ${isTikTokConnected ? `
+            <div style="font-size: 0.78rem; color: #22d3ee; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
+              ${getTiktokIcon(14, 'color: #22d3ee;')} ${escapeHtml(tikTokDisplayName || 'TikTok Linked & Ready')}
+            </div>
+            <button type="button" class="btn-youtube-disconnect" onclick="window.disconnectTiktokChannel('${safeKindKey}')" title="Disconnect TikTok channel">
+              <i data-lucide="log-out" style="width: 13px; height: 13px;"></i> Logout
+            </button>
+          ` : `
+            <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.35rem;">
+              <i data-lucide="alert-circle" style="width: 14px; height: 14px; color: #64748b;"></i> Unlinked TikTok
+            </div>
+            <button type="button" class="btn-tiktok-connect" style="background: #000000; color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.25); font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.45rem 0.75rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); text-transform: uppercase; font-size: 0.76rem; letter-spacing: 0.02em; cursor: pointer;" onclick="window.connectTiktokChannel('${safeKindKey}')" title="Link TikTok account via TikTok OAuth">
+              ${getTiktokIcon(15, 'margin-right: 4px;')} CONNECT TIKTOK
             </button>
           `}
         </div>
@@ -405,3 +429,50 @@ export async function disconnectYoutubeChannel(kindKey, callbacks = {}) {
     showToast('Error disconnecting YouTube channel.', 'error');
   }
 }
+
+export async function connectTiktokChannel(kindKey) {
+  try {
+    const res = await fetch(getApiUrl(`/api/tiktok/auth-url?kind=${encodeURIComponent(kindKey)}`));
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to get TikTok OAuth authorization URL. Check server configuration.', 'error');
+      return;
+    }
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      showToast('No authorization URL returned.', 'error');
+    }
+  } catch (err) {
+    console.error('Failed to initiate TikTok connection:', err);
+    showToast('Failed to connect to TikTok authorization service.', 'error');
+  }
+}
+
+export async function disconnectTiktokChannel(kindKey, callbacks = {}) {
+  if (!state.isAuthenticatedUser) {
+    showToast('You must be logged in to disconnect TikTok channel.', 'warning');
+    if (callbacks.onOpenLoginModal) callbacks.onOpenLoginModal();
+    return;
+  }
+  if (!confirm(`Are you sure you want to disconnect TikTok channel for '${kindKey.toUpperCase()}'?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetchWithAuth(`/api/tiktok/disconnect/${encodeURIComponent(kindKey)}`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || `Disconnected TikTok channel for '${kindKey}'.`, 'success');
+      if (callbacks.onFetchProfiles) await callbacks.onFetchProfiles();
+    } else {
+      showToast(data.error || data.message || 'Failed to disconnect TikTok channel.', 'error');
+    }
+  } catch (err) {
+    console.error('Failed to disconnect TikTok channel:', err);
+    showToast('Error disconnecting TikTok channel.', 'error');
+  }
+}
+

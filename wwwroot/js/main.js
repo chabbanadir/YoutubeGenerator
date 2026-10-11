@@ -23,7 +23,9 @@ import {
   handleCreateKind, 
   handleCreateAndConnectKind, 
   connectYoutubeChannel, 
-  disconnectYoutubeChannel 
+  disconnectYoutubeChannel,
+  connectTiktokChannel,
+  disconnectTiktokChannel
 } from './modules/gameKinds.js';
 import { 
   renderSubKindsGrid, 
@@ -166,6 +168,8 @@ window.handleCreateKind = (e) => handleCreateKind(e, { onFetchProfiles: fetchPro
 window.handleCreateAndConnectKind = (e) => handleCreateAndConnectKind(e, { onFetchProfiles: fetchProfiles });
 window.connectYoutubeChannel = connectYoutubeChannel;
 window.disconnectYoutubeChannel = (kindKey) => disconnectYoutubeChannel(kindKey, { onOpenLoginModal: openLoginModal, onFetchProfiles: fetchProfiles });
+window.connectTiktokChannel = connectTiktokChannel;
+window.disconnectTiktokChannel = (kindKey) => disconnectTiktokChannel(kindKey, { onOpenLoginModal: openLoginModal, onFetchProfiles: fetchProfiles });
 
 window.saveSubKindCard = saveSubKindCard;
 window.saveSubkindCard = saveSubKindCard;
@@ -224,6 +228,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const connectedKind = urlParams.get('connected');
   const connectedChannel = urlParams.get('channel');
   const youtubeError = urlParams.get('youtube_error');
+  const tiktokConnectedKind = urlParams.get('tiktok_connected');
+  const tiktokUser = urlParams.get('tiktok_user');
+  const tiktokError = urlParams.get('tiktok_error');
 
   if (connectedKind) {
     switchTab('profiles');
@@ -233,6 +240,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else if (youtubeError) {
     switchTab('profiles');
     showToast(`YouTube connection error: ${decodeURIComponent(youtubeError)}`, 'error');
+    window.history.replaceState({}, document.title, window.location.pathname + '#profiles');
+  } else if (tiktokConnectedKind) {
+    switchTab('profiles');
+    const userMsg = tiktokUser ? ` (${tiktokUser})` : '';
+    showToast(`Successfully connected TikTok account${userMsg} for '${tiktokConnectedKind.toUpperCase()}'!`, 'success');
+    window.history.replaceState({}, document.title, window.location.pathname + '#profiles');
+  } else if (tiktokError) {
+    switchTab('profiles');
+    showToast(`TikTok connection error: ${decodeURIComponent(tiktokError)}`, 'error');
     window.history.replaceState({}, document.title, window.location.pathname + '#profiles');
   } else if (window.location.hash === '#profiles') {
     if (state.isAuthenticatedUser) {

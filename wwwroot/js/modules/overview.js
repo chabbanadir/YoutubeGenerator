@@ -1,5 +1,5 @@
 // Overview Dashboard Module: KPIs, YouTube Hub, Video Showcase, Telemetry & Activity Stream
-import { state, escapeHtml, escapeJsString, formatDate, formatFileSize, getYoutubeIcon, getTwitchIcon } from '../core/api.js';
+import { state, escapeHtml, escapeJsString, formatDate, formatFileSize, getYoutubeIcon, getTwitchIcon, getTiktokIcon } from '../core/api.js';
 
 export function renderOverview(data) {
   if (!data) return;
@@ -186,10 +186,16 @@ export function renderYoutubeAccountsHub(channels = []) {
               </div>
             </div>
           </div>
-          <span class="yt-channel-status-pill ${isConnected ? 'connected' : 'disconnected'}">
-            <i data-lucide="${isConnected ? 'check-circle-2' : 'alert-circle'}" style="width: 12px; height: 12px;"></i>
-            ${isConnected ? 'OAuth Active' : 'Disconnected'}
-          </span>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
+            <span class="yt-channel-status-pill ${isConnected ? 'connected' : 'disconnected'}" title="YouTube OAuth Status">
+              <i data-lucide="${isConnected ? 'check-circle-2' : 'alert-circle'}" style="width: 12px; height: 12px;"></i>
+              ${isConnected ? 'YouTube' : 'YouTube Off'}
+            </span>
+            <span class="yt-channel-status-pill ${ch.isTikTokConnected ? 'connected' : 'disconnected'}" style="${ch.isTikTokConnected ? 'border-color: rgba(34, 211, 238, 0.4); color: #22d3ee;' : ''}" title="TikTok Integration Status">
+              ${getTiktokIcon(12, 'margin-right: 3px;')}
+              ${ch.isTikTokConnected ? (ch.tikTokDisplayName ? escapeHtml(ch.tikTokDisplayName) : 'TikTok Linked') : 'TikTok Off'}
+            </span>
+          </div>
         </div>
 
         <div class="yt-stats-row">
