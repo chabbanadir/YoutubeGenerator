@@ -38,6 +38,16 @@ namespace YoutubeGenerator.Services
                     isShort = val == "true" || val == "1" || val == "yes" || val == "short";
                 }
 
+                string shortLayout = "ambient";
+                if (!string.IsNullOrWhiteSpace(rec.ShortLayout))
+                {
+                    var layoutVal = rec.ShortLayout.Trim().ToLowerInvariant();
+                    if (layoutVal.Contains("stack") || layoutVal == "a" || layoutVal == "cam" || layoutVal == "split")
+                        shortLayout = "stacked";
+                    else
+                        shortLayout = "ambient";
+                }
+
                 var clip = new ClipInfo
                 {
                     Link = rec.Link?.Trim(),
@@ -46,11 +56,12 @@ namespace YoutubeGenerator.Services
                     End = rec.End,
                     KindKey = rec.KindKey ?? "default",
                     SubKindKey = rec.SubKindKey ?? "default",
-                    IsShort = isShort
+                    IsShort = isShort,
+                    ShortLayout = shortLayout
                 };
 
                 Console.WriteLine(
-                    $"CSV: Url={clip.Link}, Start={clip.Start}, End={clip.End}, KindKey={clip.KindKey}, SubKindKey={clip.SubKindKey}, IsShort={clip.IsShort}"
+                    $"CSV: Url={clip.Link}, Start={clip.Start}, End={clip.End}, KindKey={clip.KindKey}, SubKindKey={clip.SubKindKey}, IsShort={clip.IsShort}, ShortLayout={clip.ShortLayout}"
                 );
 
                 records.Add(clip);
@@ -89,6 +100,10 @@ namespace YoutubeGenerator.Services
             [CsvHelper.Configuration.Attributes.Name("isshort", "short")]
             [CsvHelper.Configuration.Attributes.Optional]
             public string? IsShort { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("shortlayout", "layout")]
+            [CsvHelper.Configuration.Attributes.Optional]
+            public string? ShortLayout { get; set; }
         }
     }
 }

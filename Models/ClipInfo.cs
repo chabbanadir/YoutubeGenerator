@@ -25,6 +25,9 @@ namespace YoutubeGenerator.Models
         [JsonPropertyName("IsShort")]
         public bool IsShort { get; set; } = false;
 
+        [JsonPropertyName("ShortLayout")]
+        public string ShortLayout { get; set; } = "ambient";
+
         public DateTime? ImportedAt { get; set; } = DateTime.UtcNow;
 
         public string UniqueKey()

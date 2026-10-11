@@ -260,7 +260,7 @@ namespace YoutubeGenerator.Workers
                             {
                                 _renderTracker?.StartShortProgress(clip.Description ?? "Streamer", clip.KindKey, clip.SubKindKey, "Encoding 9:16 Video");
                                 var dirShorts = _pathService.GetShortsDir(clip.KindKey, clip.SubKindKey, _rootPath);
-                                var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description, clip.SubKindKey);
+                                var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description, clip.SubKindKey, clip.ShortLayout);
                                 if (!string.IsNullOrEmpty(shortPath))
                                 {
                                     await _shortsScheduler.QueueShortAsync(shortPath, clip, trimResult.Duration);

@@ -33,7 +33,8 @@ namespace YoutubeGenerator.Services
             string outputDir,
             string kindKey,
             string? streamerName = null,
-            string? subKindKey = null)
+            string? subKindKey = null,
+            string? shortLayout = "ambient")
         {
             if (string.IsNullOrEmpty(inputVideoPath) || !File.Exists(inputVideoPath))
             {
@@ -46,20 +47,24 @@ namespace YoutubeGenerator.Services
             string outputPath = Path.Combine(outputDir, fileName);
 
             var kind = (kindKey ?? "lol").Trim().ToLowerInvariant();
+            var layout = (shortLayout ?? "ambient").Trim().ToLowerInvariant();
+            bool wantsStacked = layout.Contains("stack") || layout == "a" || layout == "cam" || layout == "split";
 
             try
             {
                 _renderTracker?.UpdateShortProgress(30, "Encoding 9:16 Video");
-                _renderTracker?.AddLog($"🎬 [Shorts Render] Encoding 9:16 vertical video for @{streamerName ?? "Gamer"} ({kind}/{subKindKey})", "ffmpeg");
+                string layoutLabel = wantsStacked ? "Option A (Stacked Cam)" : "Option B (Ambient Blur)";
+                _renderTracker?.AddLog($"🎬 [Shorts Render] Encoding 9:16 {layoutLabel} for @{streamerName ?? "Gamer"} ({kind}/{subKindKey})", "ffmpeg");
 
                 string? renderedPath = null;
-                if (kind == "valorant")
+                if (wantsStacked)
                 {
-                    renderedPath = await RenderValorantShortAsync(inputVideoPath, outputPath, streamerName, subKindKey);
+                    _logger.LogInformation($"[Shorts] Option A (Stacked Facecam + Centered Action) requested for @{streamerName} ({kind}/{subKindKey})");
+                    renderedPath = await RenderStackedShortAsync(inputVideoPath, outputPath, streamerName, kindKey, subKindKey);
                 }
                 else
                 {
-                    // Default / LoL: Ambient Blurred Background with baked badges
+                    _logger.LogInformation($"[Shorts] Option B (Ambient Blur 16:9 + Badges) requested for @{streamerName} ({kind}/{subKindKey})");
                     renderedPath = await RenderAmbientBlurShortAsync(inputVideoPath, outputPath, streamerName, kindKey, subKindKey);
                 }
 
@@ -191,7 +196,12 @@ namespace YoutubeGenerator.Services
             return (success && File.Exists(outputPath)) ? outputPath : null;
         }
 
-        private async Task<string?> RenderValorantShortAsync(string inputVideoPath, string outputPath, string? streamerName, string? subKindKey = null)
+        private async Task<string?> RenderStackedShortAsync(
+            string inputVideoPath,
+            string outputPath,
+            string? streamerName,
+            string? kindKey = null,
+            string? subKindKey = null)
         {
             // Probe keyframe for webcam detection
             string probeFrame = Path.Combine(Path.GetTempPath(), $"probe_{Guid.NewGuid():N}.jpg");
@@ -206,17 +216,21 @@ namespace YoutubeGenerator.Services
 
             if (webcamCoords != null && webcamCoords.HasFacecam)
             {
-                _logger.LogInformation($"[Shorts] Valorant webcam detected: x={webcamCoords.X}, y={webcamCoords.Y}, w={webcamCoords.W}, h={webcamCoords.H}. Rendering 2-Tier Stack.");
-                return await RenderStackedValorantShortAsync(inputVideoPath, outputPath, webcamCoords);
+                _logger.LogInformation($"[Shorts] Webcam detected for @{streamerName} ({kindKey}): x={webcamCoords.X}, y={webcamCoords.Y}, w={webcamCoords.W}, h={webcamCoords.H}. Rendering Option A (Stacked).");
+                return await RenderStackedVideoAsync(inputVideoPath, outputPath, webcamCoords, kindKey);
             }
             else
             {
-                _logger.LogInformation("[Shorts] No webcam detected in Valorant clip. Falling back to Ambient Blur.");
-                return await RenderAmbientBlurShortAsync(inputVideoPath, outputPath);
+                _logger.LogInformation($"[Shorts] No webcam detected in {kindKey} clip for @{streamerName}. Falling back to Option B (Ambient Blur).");
+                return await RenderAmbientBlurShortAsync(inputVideoPath, outputPath, streamerName, kindKey, subKindKey);
             }
         }
 
-        private async Task<string?> RenderStackedValorantShortAsync(string inputVideoPath, string outputPath, WebcamCoordinates coords)
+        private async Task<string?> RenderStackedVideoAsync(
+            string inputVideoPath,
+            string outputPath,
+            WebcamCoordinates coords,
+            string? kindKey = null)
         {
             string overlaysDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "overlays");
             string likeSubscribePath = Path.Combine(overlaysDir, "like_subscribe.png");
@@ -224,6 +238,8 @@ namespace YoutubeGenerator.Services
 
             string filterComplex;
             string inputArgs;
+
+            string dividerColor = (kindKey ?? "").ToLowerInvariant().Contains("val") ? "0x0f1923" : "0x010a13";
 
             if (hasOverlay)
             {
@@ -233,7 +249,7 @@ namespace YoutubeGenerator.Services
                     $"[norm]split=2[n1][n2];" +
                     $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680[cam];" +
                     $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
-                    $"[cam][game]vstack=inputs=2,drawbox=y=676:color=0x0f1923:t=8[v1];" +
+                    $"[cam][game]vstack=inputs=2,drawbox=y=676:color={dividerColor}:t=8[v1];" +
                     $"[1:v]scale=680:-1[sub];" +
                     $"[v1][sub]overlay=(W-w)/2:1500[v]";
             }
@@ -245,7 +261,7 @@ namespace YoutubeGenerator.Services
                     $"[norm]split=2[n1][n2];" +
                     $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680[cam];" +
                     $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
-                    $"[cam][game]vstack=inputs=2,drawbox=y=676:color=0x0f1923:t=8[v]";
+                    $"[cam][game]vstack=inputs=2,drawbox=y=676:color={dividerColor}:t=8[v]";
             }
 
             string args = $"{inputArgs} -filter_complex \"{filterComplex}\" " +

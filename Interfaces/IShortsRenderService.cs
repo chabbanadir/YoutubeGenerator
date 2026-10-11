@@ -9,6 +9,6 @@ namespace YoutubeGenerator.Interfaces
         /// Applies Option A (Stacked Webcam + Crosshair) for Valorant if webcam is present,
         /// or Option B (Ambient Blurred Background) for LoL and clips without webcam.
         /// </summary>
-        Task<string?> GenerateShortAsync(string inputVideoPath, string outputDir, string kindKey, string? streamerName = null, string? subKindKey = null);
+        Task<string?> GenerateShortAsync(string inputVideoPath, string outputDir, string kindKey, string? streamerName = null, string? subKindKey = null, string? shortLayout = "ambient");
     }
 }
