@@ -14,6 +14,9 @@ namespace YoutubeGenerator.Interfaces
         void AddLog(string message, string level = "info");
         void CompleteSession(string finalVideoPath);
         void FailSession(string errorMessage);
+        void StartShortProgress(string streamer, string kindKey, string subKindKey, string step = "Starting");
+        void UpdateShortProgress(double progressPercent, string? step = null);
+        void CompleteShortProgress(string? message = null);
         RenderProgressState GetSnapshot();
         IAsyncEnumerable<RenderProgressState> SubscribeAsync(CancellationToken ct = default);
     }

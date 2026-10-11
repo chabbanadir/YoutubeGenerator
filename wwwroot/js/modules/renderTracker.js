@@ -70,6 +70,7 @@ export function updateRenderUI(state) {
   currentRenderState = state;
 
   updateStep3Card(state);
+  updateShortsCard(state);
   updateSubPipelineSteps(state);
   updateTelemetryHUD(state);
   updateTerminalLogs(state.recentLogs || []);
@@ -133,6 +134,51 @@ function updateStep3Card(state) {
     }
     if (step3Footer) {
       step3Footer.innerText = 'Video assembly';
+    }
+  }
+}
+
+// 4b. Update YouTube Shorts Card in Automation Pipeline Flow
+function updateShortsCard(state) {
+  const card = document.getElementById('pipelineShortsCard');
+  const badge = document.getElementById('shortsLiveBadge');
+  const progress = document.getElementById('shortsInlineProgress');
+  const progressBar = document.getElementById('shortsInlineProgressBar');
+  const footer = document.getElementById('shortsFooterText');
+
+  if (!card) return;
+
+  const shortState = state.activeShort;
+  if (shortState && shortState.isActive) {
+    card.classList.add('rendering-active');
+    if (badge) {
+      badge.style.display = 'inline-flex';
+      badge.className = 'tag-chip rose pulse-glow';
+      badge.innerHTML = `<span class="pulse-dot"></span> ${Math.round(shortState.progressPercent || 0)}% LIVE`;
+    }
+    if (progress) {
+      progress.style.display = 'block';
+      if (progressBar) {
+        progressBar.style.width = `${Math.max(4, Math.round(shortState.progressPercent || 0))}%`;
+      }
+    }
+    if (footer) {
+      footer.innerText = shortState.step || `@${shortState.streamer}`;
+    }
+  } else {
+    card.classList.remove('rendering-active');
+    if (badge) {
+      badge.className = 'tag-chip';
+      badge.style.background = 'rgba(244, 63, 94, 0.15)';
+      badge.style.color = '#f43f5e';
+      badge.style.border = '1px solid rgba(244, 63, 94, 0.3)';
+      badge.innerText = '9:16 FEED';
+    }
+    if (progress) {
+      progress.style.display = 'none';
+    }
+    if (footer) {
+      footer.innerText = '10m Rolling Queue';
     }
   }
 }
@@ -309,6 +355,15 @@ function updateTerminalLogs(logs = []) {
     } else if (level === 'ffmpeg') {
       levelBadge = 'FFMPEG';
       levelClass = 'ffmpeg';
+    } else if (level === 'shorts') {
+      levelBadge = 'SHORTS';
+      levelClass = 'shorts';
+    } else if (level === 'thumb') {
+      levelBadge = 'THUMB';
+      levelClass = 'thumb';
+    } else if (level === 'ai') {
+      levelBadge = 'AI';
+      levelClass = 'ai';
     } else if (level === 'warning' || level === 'warn') {
       levelBadge = 'WARN';
       levelClass = 'warn';

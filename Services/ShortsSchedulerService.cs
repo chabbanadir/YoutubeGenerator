@@ -17,6 +17,7 @@ namespace YoutubeGenerator.Services
         private readonly IYoutubeUploader _uploader;
         private readonly ILlmService _llmService;
         private readonly IThumbnailService _thumbnailService;
+        private readonly IRenderTrackerService? _renderTracker;
         private readonly string _bagShorts;
         private static readonly object _fileLock = new();
 
@@ -26,13 +27,15 @@ namespace YoutubeGenerator.Services
             IMontageProfileService profileService,
             IYoutubeUploader uploader,
             ILlmService llmService,
-            IThumbnailService thumbnailService)
+            IThumbnailService thumbnailService,
+            IRenderTrackerService? renderTracker = null)
         {
             _logger = logger;
             _profileService = profileService;
             _uploader = uploader;
             _llmService = llmService;
             _thumbnailService = thumbnailService;
+            _renderTracker = renderTracker;
 
             string bagsDir = Path.Combine(env.ContentRootPath, "workspace", "bags");
             Directory.CreateDirectory(bagsDir);
@@ -49,12 +52,15 @@ namespace YoutubeGenerator.Services
             var streamer = (clip.Description ?? "Streamer").Trim().TrimStart('@');
 
             // Generate viral Short title, description, and tags via LLM
+            _renderTracker?.UpdateShortProgress(85, "AI Metadata (LLM)");
+            _renderTracker?.AddLog("ai", $"🤖 Prompting LLM for Short metadata: @{streamer} ({subKind})");
             _logger.LogInformation($"🤖 Generating AI metadata via LLM for Short ({kind}/{subKind}, Streamer: @{streamer})");
             var meta = await _llmService.GenerateShortMetadataAsync(kind, subKind, streamer, $"{subKind} highlight by @{streamer}");
 
             string title = meta.Title;
             string description = meta.Description;
             var tags = meta.Tags ?? new List<string> { "Shorts", "YouTube Shorts", $"{kind} Shorts", streamer, "Gaming" };
+            _renderTracker?.AddLog("ai", $"✨ AI Title: \"{title}\"");
 
             // Ensure 9:16 Short thumbnail exists
             string dir = Path.GetDirectoryName(shortFilePath) ?? "";
@@ -111,6 +117,8 @@ namespace YoutubeGenerator.Services
                 bag.Add(item);
                 JsonFileService.Save(_bagShorts, bag);
 
+                _renderTracker?.CompleteShortProgress($"Short '{title}' queued for {nextSlot:HH:mm:ss} UTC");
+                _renderTracker?.AddLog("shorts", $"📅 Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (+10m cadence)");
                 _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +10m cadence)");
                 return item;
             }
@@ -133,6 +141,7 @@ namespace YoutubeGenerator.Services
             {
                 var creds = _profileService.GetYoutubeCredentials(nextShort.KindKey);
 
+                _renderTracker?.AddLog("shorts", $"🚀 Uploading Short '{nextShort.Title}' to YouTube (Slot: {nextShort.ScheduledPublishTime:yyyy-MM-dd HH:mm:ss} UTC)...");
                 _logger.LogInformation($"[ShortsScheduler] Uploading Short '{nextShort.Title}' to YouTube (Scheduled release: {nextShort.ScheduledPublishTime:yyyy-MM-dd HH:mm:ss} UTC)...");
 
                 string videoId = await _uploader.UploadAsync(
@@ -146,6 +155,7 @@ namespace YoutubeGenerator.Services
 
                 if (!string.IsNullOrEmpty(videoId))
                 {
+                    _renderTracker?.AddLog("shorts", $"🎉 Short published: https://youtube.com/shorts/{videoId} (ID: {videoId})");
                     _logger.LogInformation($"✅ [ShortsScheduler] Short uploaded successfully: Video ID = {videoId}");
 
                     // Set thumbnail if generated
@@ -154,6 +164,7 @@ namespace YoutubeGenerator.Services
                         try
                         {
                             await _uploader.SetThumbnailAsync(videoId, nextShort.ThumbnailPath, creds);
+                            _renderTracker?.AddLog("thumb", $"🖼️ Attached 9:16 thumbnail to Short {videoId}");
                         }
                         catch (Exception exThumb)
                         {

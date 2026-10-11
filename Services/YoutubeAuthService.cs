@@ -101,7 +101,8 @@ namespace YoutubeGenerator.Services
                 Scopes = new[]
                 {
                     YouTubeService.Scope.YoutubeUpload,
-                    YouTubeService.Scope.YoutubeReadonly
+                    YouTubeService.Scope.YoutubeReadonly,
+                    YouTubeService.Scope.Youtube
                 }
             });
 
@@ -138,7 +139,8 @@ namespace YoutubeGenerator.Services
                 Scopes = new[]
                 {
                     YouTubeService.Scope.YoutubeUpload,
-                    YouTubeService.Scope.YoutubeReadonly
+                    YouTubeService.Scope.YoutubeReadonly,
+                    YouTubeService.Scope.Youtube
                 }
             });
 
@@ -298,7 +300,8 @@ namespace YoutubeGenerator.Services
                     Scopes = new[]
                     {
                         YouTubeService.Scope.YoutubeUpload,
-                        YouTubeService.Scope.YoutubeReadonly
+                        YouTubeService.Scope.YoutubeReadonly,
+                        YouTubeService.Scope.Youtube
                     }
                 });
 

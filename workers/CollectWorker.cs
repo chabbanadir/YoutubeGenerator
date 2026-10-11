@@ -34,6 +34,7 @@ namespace YoutubeGenerator.Workers
         private readonly YoutubeWorker _youtubeWorker;
         private readonly IShortsRenderService _shortsRender;
         private readonly IShortsSchedulerService _shortsScheduler;
+        private readonly IRenderTrackerService? _renderTracker;
 
         private readonly int n;
 
@@ -52,7 +53,8 @@ namespace YoutubeGenerator.Workers
           MontageWorker montageWorker,
           YoutubeWorker youtubeWorker,
           IShortsRenderService shortsRender,
-          IShortsSchedulerService shortsScheduler)
+          IShortsSchedulerService shortsScheduler,
+          IRenderTrackerService? renderTracker = null)
         {
             _pathService = pathService;
             _download = download;
@@ -67,6 +69,7 @@ namespace YoutubeGenerator.Workers
             _youtubeWorker = youtubeWorker;
             _shortsRender = shortsRender;
             _shortsScheduler = shortsScheduler;
+            _renderTracker = renderTracker;
 
             var cfgValue = cfg.Value;
             n = cfgValue.BatchSize;
@@ -255,6 +258,7 @@ namespace YoutubeGenerator.Workers
                         {
                             try
                             {
+                                _renderTracker?.StartShortProgress(clip.Description ?? "Streamer", clip.KindKey, clip.SubKindKey, "Encoding 9:16 Video");
                                 var dirShorts = _pathService.GetShortsDir(clip.KindKey, clip.SubKindKey, _rootPath);
                                 var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description, clip.SubKindKey);
                                 if (!string.IsNullOrEmpty(shortPath))
@@ -265,6 +269,7 @@ namespace YoutubeGenerator.Workers
                             catch (Exception exShort)
                             {
                                 _logger.LogWarning(exShort, $"[Shorts] Failed to generate vertical short for {clip.Link}");
+                                _renderTracker?.AddLog($"⚠️ [Shorts] Failed to generate short for @{clip.Description}: {exShort.Message}", "warning");
                             }
                         }
 

@@ -116,6 +116,7 @@ export async function fetchDashboardOverview(showNotification = false) {
     setVal('pipe-trimmed-count', bagsMap['bag_trimmed.json']);
     setVal('pipe-montage-count', bagsMap['bag_montage.json']);
     setVal('pipe-youtube-count', bagsMap['bag_youtube.json']);
+    setVal('pipe-shorts-count', bagsMap['bag_shorts.json']);
     setVal('pipe-done-count', bagsMap['bag_youtube_done.json']);
     setVal('pipe-failed-count', bagsMap['bag_failed.json']);
 

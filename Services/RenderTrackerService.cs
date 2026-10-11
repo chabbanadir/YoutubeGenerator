@@ -292,6 +292,67 @@ namespace YoutubeGenerator.Services
             BroadcastState();
         }
 
+        public void StartShortProgress(string streamer, string kindKey, string subKindKey, string step = "Starting")
+        {
+            lock (_lock)
+            {
+                _state.ActiveShort = new ShortProgressState
+                {
+                    IsActive = true,
+                    Streamer = streamer,
+                    KindKey = kindKey,
+                    SubKindKey = subKindKey,
+                    Step = step,
+                    ProgressPercent = 10,
+                    StartedAt = DateTime.UtcNow
+                };
+                _state.LastUpdatedAt = DateTime.UtcNow;
+                InternalAddLog($"⚡ [Shorts] Starting pipeline for @{streamer} ({kindKey}/{subKindKey}): {step}", "shorts");
+            }
+
+            BroadcastState();
+        }
+
+        public void UpdateShortProgress(double progressPercent, string? step = null)
+        {
+            lock (_lock)
+            {
+                if (_state.ActiveShort != null)
+                {
+                    _state.ActiveShort.ProgressPercent = Math.Clamp(progressPercent, 0, 100);
+                    if (!string.IsNullOrEmpty(step))
+                    {
+                        _state.ActiveShort.Step = step;
+                    }
+                    _state.LastUpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            BroadcastState();
+        }
+
+        public void CompleteShortProgress(string? message = null)
+        {
+            lock (_lock)
+            {
+                if (_state.ActiveShort != null)
+                {
+                    _state.ActiveShort.IsActive = false;
+                    _state.ActiveShort.ProgressPercent = 100;
+                    _state.ActiveShort.CompletedAt = DateTime.UtcNow;
+                    _state.ActiveShort.Step = "Completed";
+                    _state.LastUpdatedAt = DateTime.UtcNow;
+                }
+
+                if (!string.IsNullOrEmpty(message))
+                {
+                    InternalAddLog($"✅ [Shorts] {message}", "success");
+                }
+            }
+
+            BroadcastState();
+        }
+
         public RenderProgressState GetSnapshot()
         {
             lock (_lock)
@@ -373,6 +434,17 @@ namespace YoutubeGenerator.Services
                 LastUpdatedAt = src.LastUpdatedAt,
                 ErrorMessage = src.ErrorMessage,
                 FinalVideoPath = src.FinalVideoPath,
+                ActiveShort = src.ActiveShort == null ? null : new ShortProgressState
+                {
+                    IsActive = src.ActiveShort.IsActive,
+                    Streamer = src.ActiveShort.Streamer,
+                    KindKey = src.ActiveShort.KindKey,
+                    SubKindKey = src.ActiveShort.SubKindKey,
+                    Step = src.ActiveShort.Step,
+                    ProgressPercent = src.ActiveShort.ProgressPercent,
+                    StartedAt = src.ActiveShort.StartedAt,
+                    CompletedAt = src.ActiveShort.CompletedAt
+                },
                 Telemetry = new RenderTelemetry
                 {
                     CurrentFrame = src.Telemetry.CurrentFrame,

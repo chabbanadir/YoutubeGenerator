@@ -55,6 +55,18 @@ namespace YoutubeGenerator.Models
         public string EstimatedRemainingTime { get; set; } = "";
     }
 
+    public class ShortProgressState
+    {
+        public bool IsActive { get; set; }
+        public string? Streamer { get; set; }
+        public string? KindKey { get; set; }
+        public string? SubKindKey { get; set; }
+        public string Step { get; set; } = "Idle";
+        public double ProgressPercent { get; set; }
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
+
     public class RenderProgressState
     {
         public bool IsActive { get; set; }
@@ -79,6 +91,8 @@ namespace YoutubeGenerator.Models
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
         public string? ErrorMessage { get; set; }
         public string? FinalVideoPath { get; set; }
+
+        public ShortProgressState? ActiveShort { get; set; }
 
         public RenderTelemetry Telemetry { get; set; } = new();
         public List<RenderSubStep> SubSteps { get; set; } = new();

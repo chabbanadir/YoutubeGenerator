@@ -12,12 +12,17 @@ namespace YoutubeGenerator.Services
     {
         private readonly IWebHostEnvironment _env;
         private readonly ILogger<ThumbnailService> _logger;
+        private readonly IRenderTrackerService? _renderTracker;
         private readonly string _assetsRoot;
 
-        public ThumbnailService(IWebHostEnvironment env, ILogger<ThumbnailService> logger)
+        public ThumbnailService(
+            IWebHostEnvironment env,
+            ILogger<ThumbnailService> logger,
+            IRenderTrackerService? renderTracker = null)
         {
             _env = env;
             _logger = logger;
+            _renderTracker = renderTracker;
             _assetsRoot = Path.Combine(env.ContentRootPath, "workspace", "ressources", "thumbnails");
         }
 
@@ -104,6 +109,8 @@ namespace YoutubeGenerator.Services
                 string baseName = Path.GetFileNameWithoutExtension(shortVideoPath);
                 string outputPath = Path.Combine(outputDir, $"thumb_{baseName}.jpg");
 
+                _renderTracker?.UpdateShortProgress(75, "Compositing 9:16 Thumbnail");
+                _renderTracker?.AddLog("thumb", $"🎨 Compositing 9:16 Short thumbnail for {baseName} ({kindKey}/{subKindKey})");
                 _logger.LogInformation($"🎨 Generating high-CTR 9:16 Short thumbnail for {baseName} ({kindKey}/{subKindKey})");
 
                 var kind = (kindKey ?? "lol").ToLowerInvariant();
@@ -208,6 +215,7 @@ namespace YoutubeGenerator.Services
                     return null;
                 }
 
+                _renderTracker?.AddLog("thumb", $"✅ Short thumbnail generated: {Path.GetFileName(outputPath)} ({new FileInfo(outputPath).Length / 1024} KB)");
                 _logger.LogInformation($"✅ Generated high-CTR 9:16 Short thumbnail: {outputPath} ({new FileInfo(outputPath).Length / 1024} KB)");
                 return outputPath;
             }

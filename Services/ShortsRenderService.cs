@@ -14,15 +14,18 @@ namespace YoutubeGenerator.Services
         private readonly ILogger<ShortsRenderService> _logger;
         private readonly IWebHostEnvironment _env;
         private readonly IThumbnailService _thumbnailService;
+        private readonly IRenderTrackerService? _renderTracker;
 
         public ShortsRenderService(
             ILogger<ShortsRenderService> logger,
             IWebHostEnvironment env,
-            IThumbnailService thumbnailService)
+            IThumbnailService thumbnailService,
+            IRenderTrackerService? renderTracker = null)
         {
             _logger = logger;
             _env = env;
             _thumbnailService = thumbnailService;
+            _renderTracker = renderTracker;
         }
 
         public async Task<string?> GenerateShortAsync(
@@ -46,19 +49,25 @@ namespace YoutubeGenerator.Services
 
             try
             {
+                _renderTracker?.UpdateShortProgress(30, "Encoding 9:16 Video");
+                _renderTracker?.AddLog($"🎬 [Shorts Render] Encoding 9:16 vertical video for @{streamerName ?? "Gamer"} ({kind}/{subKindKey})", "ffmpeg");
+
                 string? renderedPath = null;
                 if (kind == "valorant")
                 {
-                    renderedPath = await RenderValorantShortAsync(inputVideoPath, outputPath, streamerName);
+                    renderedPath = await RenderValorantShortAsync(inputVideoPath, outputPath, streamerName, subKindKey);
                 }
                 else
                 {
-                    // Default / LoL: Ambient Blurred Background
-                    renderedPath = await RenderAmbientBlurShortAsync(inputVideoPath, outputPath);
+                    // Default / LoL: Ambient Blurred Background with baked badges
+                    renderedPath = await RenderAmbientBlurShortAsync(inputVideoPath, outputPath, streamerName, kindKey, subKindKey);
                 }
 
                 if (!string.IsNullOrEmpty(renderedPath) && File.Exists(renderedPath))
                 {
+                    _renderTracker?.UpdateShortProgress(65, "Generating 9:16 Thumbnail");
+                    _renderTracker?.AddLog($"✅ [Shorts Render] 9:16 video rendered: {fileName} ({new FileInfo(renderedPath).Length / (1024 * 1024)} MB)", "success");
+
                     // Auto-generate matching 9:16 high-CTR thumbnail during the rendering process
                     try
                     {
@@ -77,50 +86,112 @@ namespace YoutubeGenerator.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"[Shorts] Failed to render short for {inputVideoPath}");
+                _renderTracker?.AddLog($"❌ [Shorts Render] Error rendering {fileName}: {ex.Message}", "error");
                 return null;
             }
         }
 
-        private async Task<string?> RenderAmbientBlurShortAsync(string inputVideoPath, string outputPath)
+        private async Task<string?> RenderAmbientBlurShortAsync(
+            string inputVideoPath,
+            string outputPath,
+            string? streamerName = null,
+            string? kindKey = null,
+            string? subKindKey = null)
         {
             _logger.LogInformation($"[Shorts] Rendering Ambient Blur 9:16 Short -> {outputPath}");
 
             string overlaysDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "overlays");
             string likeSubscribePath = Path.Combine(overlaysDir, "like_subscribe.png");
-            bool hasOverlay = File.Exists(likeSubscribePath);
 
-            string filterComplex;
-            string inputArgs;
+            string badgesDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "thumbnails", "badges");
+            string fontsDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "thumbnails", "fonts");
 
-            if (hasOverlay)
+            var kind = (kindKey ?? "lol").ToLowerInvariant();
+            var subKind = (subKindKey ?? "normal").ToLowerInvariant();
+            var streamer = (streamerName ?? "Streamer").Trim().TrimStart('@');
+
+            // Resolve badge
+            string? badgePath = null;
+            if (kind.Contains("val"))
             {
-                inputArgs = $"-y -i \"{inputVideoPath}\" -i \"{likeSubscribePath}\"";
-                filterComplex =
-                    "[0:v]scale=1920:1080,split=2[n1][n2];" +
-                    "[n1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5,eq=brightness=-0.1:saturation=1.2[bg];" +
-                    "[n2]scale=1080:608[fg];" +
-                    "[bg][fg]overlay=0:(1920-608)/2[v1];" +
-                    "[1:v]scale=680:-1[sub];" +
-                    "[v1][sub]overlay=(W-w)/2:1500[v]";
+                string aceBadge = Path.Combine(badgesDir, "ace.png");
+                string radiantBadge = Path.Combine(badgesDir, "radiant_badge.png");
+                badgePath = File.Exists(aceBadge) ? aceBadge : (File.Exists(radiantBadge) ? radiantBadge : null);
             }
             else
             {
-                inputArgs = $"-y -i \"{inputVideoPath}\"";
-                filterComplex =
-                    "[0:v]scale=1920:1080,split=2[n1][n2];" +
-                    "[n1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5,eq=brightness=-0.1:saturation=1.2[bg];" +
-                    "[n2]scale=1080:608[fg];" +
-                    "[bg][fg]overlay=0:(1920-608)/2[v]";
+                string pentaBadge = Path.Combine(badgesDir, "pentakill.png");
+                string challengerIcon = Path.Combine(badgesDir, "challenger_icon.png");
+                badgePath = File.Exists(pentaBadge) ? pentaBadge : (File.Exists(challengerIcon) ? challengerIcon : null);
             }
 
-            string args = $"{inputArgs} -filter_complex \"{filterComplex}\" " +
-                          $"-map \"[v]\" -map 0:a? -c:v libx264 -preset veryfast -crf 22 -c:a aac -b:a 192k -movflags +faststart \"{outputPath}\"";
+            // Resolve font
+            string beaufortFont = Path.Combine(fontsDir, "beaufort_heavy.otf");
+            string boldFont = Path.Combine(fontsDir, "font_bold.ttf");
+            string fontPath = (kind.Contains("lol") && File.Exists(beaufortFont))
+                ? beaufortFont
+                : (File.Exists(boldFont) ? boldFont : "Arial");
+
+            var inputs = new List<string> { $"-i \"{inputVideoPath}\"" };
+            int nextIdx = 1;
+            int? likeSubIdx = null;
+            int? badgeIdx = null;
+
+            if (File.Exists(likeSubscribePath))
+            {
+                inputs.Add($"-i \"{likeSubscribePath}\"");
+                likeSubIdx = nextIdx++;
+            }
+
+            if (!string.IsNullOrEmpty(badgePath) && File.Exists(badgePath))
+            {
+                inputs.Add($"-i \"{badgePath}\"");
+                badgeIdx = nextIdx++;
+            }
+
+            var filter = new List<string>();
+            filter.Add("[0:v]scale=1920:1080,split=2[n1][n2]");
+            filter.Add("[n1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5,eq=brightness=-0.1:saturation=1.2[bg]");
+            filter.Add("[n2]scale=1080:608[fg]");
+            filter.Add("[bg][fg]overlay=0:(1920-608)/2[v1]");
+            string currentLayer = "[v1]";
+
+            string escapedFont = fontPath.Replace("\\", "/").Replace(":", "\\:");
+            string escapedStreamer = streamer.Replace("'", "\\'").Replace(":", "\\:").Replace("%", "\\%");
+
+            // Top Game Badge + Streamer Handle baked into video
+            if (badgeIdx.HasValue)
+            {
+                filter.Add($"[{badgeIdx.Value}:v]scale=440:-1[badge]");
+                filter.Add($"{currentLayer}[badge]overlay=(W-w)/2:120[v_badge]");
+                filter.Add($"[v_badge]drawtext=fontfile='{escapedFont}':text='@{escapedStreamer}':fontcolor=white:fontsize=46:borderw=6:bordercolor=black:x=(w-text_w)/2:y=350[v_top]");
+                currentLayer = "[v_top]";
+            }
+            else
+            {
+                filter.Add($"{currentLayer}drawtext=fontfile='{escapedFont}':text='@{escapedStreamer}':fontcolor=white:fontsize=50:borderw=6:bordercolor=black:x=(w-text_w)/2:y=240[v_top]");
+                currentLayer = "[v_top]";
+            }
+
+            // Bottom Like & Subscribe Sticker banner baked into video
+            if (likeSubIdx.HasValue)
+            {
+                filter.Add($"[{likeSubIdx.Value}:v]scale=680:-1[sub]");
+                filter.Add($"{currentLayer}[sub]overlay=(W-w)/2:1500[v]");
+                currentLayer = "[v]";
+            }
+
+            string filterComplex = string.Join(";", filter);
+            string inputArgs = string.Join(" ", inputs);
+
+            string args = $"-y {inputArgs} -filter_complex \"{filterComplex}\" " +
+                          $"-map \"{currentLayer}\" -map 0:a? -c:v libx264 -preset veryfast -crf 22 -c:a aac -b:a 192k -movflags +faststart \"{outputPath}\"";
 
             bool success = await RunFfmpegCommandAsync(args);
             return (success && File.Exists(outputPath)) ? outputPath : null;
         }
 
-        private async Task<string?> RenderValorantShortAsync(string inputVideoPath, string outputPath, string? streamerName)
+        private async Task<string?> RenderValorantShortAsync(string inputVideoPath, string outputPath, string? streamerName, string? subKindKey = null)
         {
             // Probe keyframe for webcam detection
             string probeFrame = Path.Combine(Path.GetTempPath(), $"probe_{Guid.NewGuid():N}.jpg");

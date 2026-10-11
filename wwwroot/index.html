@@ -212,6 +212,31 @@
               </div>
             </div>
 
+            <!-- Step Shorts: YouTube Shorts Queue -->
+            <div class="pipeline-step-card" id="pipelineShortsCard" onclick="openBagInExplorer('bag_shorts.json')">
+              <div class="step-card-header">
+                <span class="step-card-num" style="color: #f43f5e;">SHORTS</span>
+                <span class="tag-chip" id="shortsLiveBadge" style="background: rgba(244, 63, 94, 0.15); color: #f43f5e; border: 1px solid rgba(244, 63, 94, 0.3);">9:16 FEED</span>
+              </div>
+              <div class="step-card-body">
+                <div class="step-card-icon" style="background: rgba(244, 63, 94, 0.12); color: #f43f5e;">
+                  <i data-lucide="smartphone"></i>
+                </div>
+                <div class="step-card-info">
+                  <div class="step-card-title">YouTube Shorts</div>
+                  <div class="step-card-sub" id="shortsFooterText">10m Rolling Queue</div>
+                </div>
+              </div>
+              <!-- Live Inline Progress on Shorts -->
+              <div class="step-inline-progress" id="shortsInlineProgress" style="display: none;">
+                <div class="step-inline-progress-bar" id="shortsInlineProgressBar" style="width: 0%; background: linear-gradient(90deg, #f43f5e, #fb7185);"></div>
+              </div>
+              <div class="step-card-footer">
+                <span class="step-card-metric-label">Scheduled / Live</span>
+                <span class="step-card-metric-val" id="pipe-shorts-count">0</span>
+              </div>
+            </div>
+
             <!-- Step 5: Published -->
             <div class="pipeline-step-card" onclick="openBagInExplorer('bag_youtube_done.json')">
               <div class="step-card-header">

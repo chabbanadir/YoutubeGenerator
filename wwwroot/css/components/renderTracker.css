@@ -562,6 +562,21 @@
   color: #c084fc;
 }
 
+.terminal-tag.shorts {
+  background: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+}
+
+.terminal-tag.thumb {
+  background: rgba(234, 88, 12, 0.2);
+  color: #fb923c;
+}
+
+.terminal-tag.ai {
+  background: rgba(14, 165, 233, 0.2);
+  color: #38bdf8;
+}
+
 .terminal-tag.success {
   background: rgba(16, 185, 129, 0.18);
   color: #34d399;
@@ -584,6 +599,21 @@
 
 .terminal-line.ffmpeg .terminal-msg {
   color: #94a3b8;
+}
+
+.terminal-line.shorts .terminal-msg {
+  color: #fecdd3;
+  font-weight: 500;
+}
+
+.terminal-line.thumb .terminal-msg {
+  color: #fed7aa;
+  font-weight: 500;
+}
+
+.terminal-line.ai .terminal-msg {
+  color: #bae6fd;
+  font-weight: 500;
 }
 
 .terminal-line.success .terminal-msg {
