@@ -143,6 +143,8 @@ namespace YoutubeGenerator.Services
                         if (uProp.TryGetProperty("MinDelayHours", out var mProp) && mProp.TryGetInt32(out var md)) minDelayHours = md;
                         if (uProp.TryGetProperty("LastUploadTime", out var lProp) && lProp.TryGetDateTime(out var lu)) lastUploadTime = lu;
                         if (uProp.TryGetProperty("UploadCounter", out var ucProp) && ucProp.TryGetInt32(out var uc)) uploadCounter = uc;
+                    }
+
                     bool isTikTokConnected = false;
                     string tikTokDisplayName = "";
                     if (root.TryGetProperty("TikTokConfig", out var ttProp) && ttProp.ValueKind == JsonValueKind.Object)
