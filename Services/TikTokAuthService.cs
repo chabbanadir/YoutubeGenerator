@@ -40,12 +40,12 @@ namespace YoutubeGenerator.Services
             var key = _config["TikTok:ClientKey"]
                    ?? _config["TIKTOK_CLIENT_KEY"]
                    ?? Environment.GetEnvironmentVariable("TIKTOK_CLIENT_KEY")
-                   ?? "awlwxrmcsawcrfy4";
+                   ?? "sbawrtsc053p26j0hd";
 
             var secret = _config["TikTok:ClientSecret"]
                       ?? _config["TIKTOK_CLIENT_SECRET"]
                       ?? Environment.GetEnvironmentVariable("TIKTOK_CLIENT_SECRET")
-                      ?? "Pvf1JZHMItyauHkqf8NtvV8e8k9bkpqG";
+                      ?? "YPKrzMLrQWH5qMtEG25KCm11sxQ0pxqW";
 
             return (key.Trim(), secret.Trim());
         }
@@ -89,7 +89,8 @@ namespace YoutubeGenerator.Services
             }
 
             var json = JsonNode.Parse(tokenBody);
-            var data = json?["data"];
+            // TikTok may return tokens at root level OR inside a "data" wrapper
+            var data = json?["data"] ?? json;
             if (data == null)
             {
                 throw new Exception($"Invalid response from TikTok token endpoint: {tokenBody}");

@@ -89,12 +89,12 @@ namespace YoutubeGenerator.Controllers
             if (!string.IsNullOrWhiteSpace(error))
             {
                 _logger.LogWarning($"TikTok OAuth callback error: {error} - {error_description}");
-                return Redirect($"/youtube/?tiktok_error={Uri.EscapeDataString(error_description ?? error)}#profiles");
+                return Redirect($"/?tiktok_error={Uri.EscapeDataString(error_description ?? error)}#profiles");
             }
 
             if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
             {
-                return Redirect("/youtube/?tiktok_error=InvalidCallbackState#profiles");
+                return Redirect("/?tiktok_error=InvalidCallbackState#profiles");
             }
 
             try
@@ -107,12 +107,12 @@ namespace YoutubeGenerator.Controllers
 
                 _authService.SaveConnection(kindKey, openId, accessToken, refreshToken, displayName, avatarUrl, expiresIn, refreshExpiresIn);
 
-                return Redirect($"/youtube/?connected_tiktok={Uri.EscapeDataString(kindKey)}&account={Uri.EscapeDataString(displayName)}#profiles");
+                return Redirect($"/?connected_tiktok={Uri.EscapeDataString(kindKey)}&account={Uri.EscapeDataString(displayName)}#profiles");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to process TikTok OAuth callback.");
-                return Redirect($"/youtube/?tiktok_error={Uri.EscapeDataString(ex.Message)}#profiles");
+                return Redirect($"/?tiktok_error={Uri.EscapeDataString(ex.Message)}#profiles");
             }
         }
 
