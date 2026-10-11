@@ -109,103 +109,13 @@ namespace YoutubeGenerator.Services
                 string baseName = Path.GetFileNameWithoutExtension(shortVideoPath);
                 string outputPath = Path.Combine(outputDir, $"thumb_{baseName}.jpg");
 
-                _renderTracker?.UpdateShortProgress(75, "Compositing 9:16 Thumbnail");
-                _renderTracker?.AddLog("thumb", $"🎨 Compositing 9:16 Short thumbnail for {baseName} ({kindKey}/{subKindKey})");
-                _logger.LogInformation($"🎨 Generating high-CTR 9:16 Short thumbnail for {baseName} ({kindKey}/{subKindKey})");
+                _renderTracker?.UpdateShortProgress(75, "Extracting 9:16 Thumbnail");
+                _renderTracker?.AddLog("thumb", $"🎨 Extracting clean 9:16 thumbnail for {baseName} ({kindKey}/{subKindKey})");
+                _logger.LogInformation($"🎨 Extracting high-CTR 9:16 Short thumbnail for {baseName} ({kindKey}/{subKindKey})");
 
-                var kind = (kindKey ?? "lol").ToLowerInvariant();
-                var subKind = (subKindKey ?? "normal").ToLowerInvariant();
-                var streamer = (streamerName ?? "Streamer").Trim().TrimStart('@');
-
-                // Resolve Game Badge
-                string badgesDir = Path.Combine(_assetsRoot, "badges");
-                string? badgePath = null;
-                if (kind.Contains("val"))
-                {
-                    string aceBadge = Path.Combine(badgesDir, "ace.png");
-                    string radiantBadge = Path.Combine(badgesDir, "radiant_badge.png");
-                    badgePath = File.Exists(aceBadge) ? aceBadge : (File.Exists(radiantBadge) ? radiantBadge : null);
-                }
-                else
-                {
-                    string pentaBadge = Path.Combine(badgesDir, "pentakill.png");
-                    string challengerIcon = Path.Combine(badgesDir, "challenger_icon.png");
-                    badgePath = File.Exists(pentaBadge) ? pentaBadge : (File.Exists(challengerIcon) ? challengerIcon : null);
-                }
-
-                // Resolve Font
-                string fontsDir = Path.Combine(_assetsRoot, "fonts");
-                string beaufortFont = Path.Combine(fontsDir, "beaufort_heavy.otf");
-                string boldFont = Path.Combine(fontsDir, "font_bold.ttf");
-                string fontPath = (kind.Contains("lol") && File.Exists(beaufortFont))
-                    ? beaufortFont
-                    : (File.Exists(boldFont) ? boldFont : "Arial");
-
-                // Resolve Like & Subscribe sticker
-                string overlaysDir = Path.Combine(_env.ContentRootPath, "workspace", "ressources", "overlays");
-                string likeSubscribePath = Path.Combine(overlaysDir, "like_subscribe.png");
-
-                // Hook phrase
-                string hookText = kind.Contains("val")
-                    ? (subKind.Contains("ace") ? "RADIANT 1v5?!" : "HOW IS HE REAL?!")
-                    : (subKind.Contains("penta") ? "PENTAKILL?!" : "1000 IQ PLAY?!");
-
-                // Build FFmpeg command for 9:16 Vertical Thumbnail
-                var inputs = new List<string>
-                {
-                    $"-ss 00:00:03 -i \"{shortVideoPath}\""
-                };
-
-                int nextIdx = 1;
-                int? badgeIdx = null;
-                int? likeSubIdx = null;
-
-                if (!string.IsNullOrEmpty(badgePath) && File.Exists(badgePath))
-                {
-                    inputs.Add($"-i \"{badgePath}\"");
-                    badgeIdx = nextIdx++;
-                }
-
-                if (File.Exists(likeSubscribePath))
-                {
-                    inputs.Add($"-i \"{likeSubscribePath}\"");
-                    likeSubIdx = nextIdx++;
-                }
-
-                var filter = new List<string>();
-                // Base 9:16 frame with rich contrast and saturation
-                filter.Add("[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,eq=contrast=1.12:saturation=1.25[bg]");
-                string currentLayer = "[bg]";
-
-                string escapedFont = fontPath.Replace("\\", "/").Replace(":", "\\:");
-                string escapedStreamer = streamer.Replace("'", "\\'").Replace(":", "\\:").Replace("%", "\\%");
-                string escapedHook = hookText.Replace("'", "\\'").Replace(":", "\\:").Replace("%", "\\%");
-
-                // Top focal element (Badge + Streamer tag OR Hook text + Streamer tag)
-                if (badgeIdx.HasValue)
-                {
-                    filter.Add($"[{badgeIdx.Value}:v]scale=460:-1[badge]");
-                    filter.Add($"{currentLayer}[badge]overlay=(W-w)/2:140[l_badge]");
-                    filter.Add($"[l_badge]drawtext=fontfile='{escapedFont}':text='@{escapedStreamer}':fontcolor=white:fontsize=46:borderw=6:bordercolor=black:x=(w-text_w)/2:y=380[l_top]");
-                    currentLayer = "[l_top]";
-                }
-                else
-                {
-                    filter.Add($"{currentLayer}drawtext=fontfile='{escapedFont}':text='{escapedHook}':fontcolor=0xFFE600:fontsize=90:borderw=9:bordercolor=black:x=(w-text_w)/2:y=180,drawtext=fontfile='{escapedFont}':text='@{escapedStreamer}':fontcolor=white:fontsize=46:borderw=6:bordercolor=black:x=(w-text_w)/2:y=310[l_top]");
-                    currentLayer = "[l_top]";
-                }
-
-                // Bottom Call-to-Action sticker (Like & Subscribe banner)
-                if (likeSubIdx.HasValue)
-                {
-                    filter.Add($"[{likeSubIdx.Value}:v]scale=740:-1[sub]");
-                    filter.Add($"{currentLayer}[sub]overlay=(W-w)/2:1500[out]");
-                    currentLayer = "[out]";
-                }
-
-                string filterComplex = string.Join(";", filter);
-                string inputArgs = string.Join(" ", inputs);
-                string ffmpegArgs = $"-y {inputArgs} -filter_complex \"{filterComplex}\" -map \"{currentLayer}\" -vframes 1 -q:v 2 \"{outputPath}\"";
+                // The vertical short video already contains the branded game header, streamer tag, and CTA sticker.
+                // Extracting the keyframe directly at 00:00:03 avoids duplicate text and mismatched overlay layers.
+                string ffmpegArgs = $"-y -ss 00:00:03 -i \"{shortVideoPath}\" -vframes 1 -q:v 2 \"{outputPath}\"";
 
                 var (code, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", ffmpegArgs, outputDir);
 
@@ -334,13 +244,14 @@ namespace YoutubeGenerator.Services
                 return (null, null);
 
             var kind = (package.KindKey ?? "").ToLower();
+            var subKind = (package.SubKindKey ?? "").ToLower();
 
             if (kind.Contains("val"))
             {
                 string aceBadge = Path.Combine(badgesDir, "ace.png");
                 string radiantBadge = Path.Combine(badgesDir, "radiant_badge.png");
                 return (
-                    File.Exists(aceBadge) ? aceBadge : null,
+                    subKind.Contains("ace") && File.Exists(aceBadge) ? aceBadge : null,
                     File.Exists(radiantBadge) ? radiantBadge : null
                 );
             }
@@ -349,7 +260,7 @@ namespace YoutubeGenerator.Services
                 string pentakillBadge = Path.Combine(badgesDir, "pentakill.png");
                 string challengerIcon = Path.Combine(badgesDir, "challenger_icon.png");
                 return (
-                    File.Exists(pentakillBadge) ? pentakillBadge : null,
+                    subKind.Contains("penta") && File.Exists(pentakillBadge) ? pentakillBadge : null,
                     File.Exists(challengerIcon) ? challengerIcon : null
                 );
             }

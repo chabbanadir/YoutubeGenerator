@@ -115,19 +115,19 @@ namespace YoutubeGenerator.Services
             var subKind = (subKindKey ?? "normal").ToLowerInvariant();
             var streamer = (streamerName ?? "Streamer").Trim().TrimStart('@');
 
-            // Resolve badge
+            // Resolve badge - strictly based on subKind
             string? badgePath = null;
             if (kind.Contains("val"))
             {
                 string aceBadge = Path.Combine(badgesDir, "ace.png");
-                string radiantBadge = Path.Combine(badgesDir, "radiant_badge.png");
-                badgePath = File.Exists(aceBadge) ? aceBadge : (File.Exists(radiantBadge) ? radiantBadge : null);
+                if (subKind.Contains("ace") && File.Exists(aceBadge))
+                    badgePath = aceBadge;
             }
             else
             {
                 string pentaBadge = Path.Combine(badgesDir, "pentakill.png");
-                string challengerIcon = Path.Combine(badgesDir, "challenger_icon.png");
-                badgePath = File.Exists(pentaBadge) ? pentaBadge : (File.Exists(challengerIcon) ? challengerIcon : null);
+                if (subKind.Contains("penta") && File.Exists(pentaBadge))
+                    badgePath = pentaBadge;
             }
 
             // Resolve font
@@ -203,15 +203,30 @@ namespace YoutubeGenerator.Services
             string? kindKey = null,
             string? subKindKey = null)
         {
-            // Probe keyframe for webcam detection
-            string probeFrame = Path.Combine(Path.GetTempPath(), $"probe_{Guid.NewGuid():N}.jpg");
-            bool extracted = await ExtractProbeFrameAsync(inputVideoPath, probeFrame);
+            // Probe keyframe across multiple timestamps (second 3, 5, 2) to reliably catch facecam
+            WebcamCoordinates? webcamCoords = null;
+            int[] probeOffsets = new[] { 3, 5, 2 };
 
-            var webcamCoords = DetectWebcam(probeFrame, streamerName);
-
-            if (File.Exists(probeFrame))
+            foreach (var sec in probeOffsets)
             {
-                try { File.Delete(probeFrame); } catch { }
+                string probeFrame = Path.Combine(Path.GetTempPath(), $"probe_{sec}_{Guid.NewGuid():N}.jpg");
+                bool extracted = await ExtractProbeFrameAsync(inputVideoPath, probeFrame, sec);
+                if (extracted && File.Exists(probeFrame))
+                {
+                    try
+                    {
+                        var coords = DetectWebcam(probeFrame, streamerName);
+                        if (coords != null && coords.HasFacecam)
+                        {
+                            webcamCoords = coords;
+                            break;
+                        }
+                    }
+                    finally
+                    {
+                        try { File.Delete(probeFrame); } catch { }
+                    }
+                }
             }
 
             if (webcamCoords != null && webcamCoords.HasFacecam)
@@ -271,9 +286,9 @@ namespace YoutubeGenerator.Services
             return (success && File.Exists(outputPath)) ? outputPath : null;
         }
 
-        private async Task<bool> ExtractProbeFrameAsync(string videoPath, string framePath)
+        private async Task<bool> ExtractProbeFrameAsync(string videoPath, string framePath, int secondOffset = 3)
         {
-            string args = $"-y -ss 00:00:02 -i \"{videoPath}\" -vframes 1 \"{framePath}\"";
+            string args = $"-y -ss 00:00:{secondOffset:D2} -i \"{videoPath}\" -vframes 1 \"{framePath}\"";
             return await RunFfmpegCommandAsync(args);
         }
 

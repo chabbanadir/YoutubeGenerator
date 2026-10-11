@@ -1,4 +1,4 @@
-using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -20,6 +20,7 @@ namespace YoutubeGenerator.Services
         private readonly IRenderTrackerService? _renderTracker;
         private readonly string _bagShorts;
         private static readonly object _fileLock = new();
+        private static readonly ConcurrentDictionary<string, DateTime> _channelBackoff = new();
 
         public ShortsSchedulerService(
             IWebHostEnvironment env,
@@ -83,16 +84,16 @@ namespace YoutubeGenerator.Services
             {
                 var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
 
-                // Calculate 10-minute rolling cadence
+                // Calculate 3-hour rolling cadence per game channel to respect YouTube limits and maximize algorithmic performance
                 DateTime nextSlot;
                 var latestPending = bag
-                    .Where(s => !s.IsUploaded)
+                    .Where(s => !s.IsUploaded && s.KindKey == kind)
                     .OrderByDescending(s => s.ScheduledPublishTime)
                     .FirstOrDefault();
 
                 if (latestPending != null && latestPending.ScheduledPublishTime > DateTime.UtcNow)
                 {
-                    nextSlot = latestPending.ScheduledPublishTime.AddMinutes(10);
+                    nextSlot = latestPending.ScheduledPublishTime.AddHours(3);
                 }
                 else
                 {
@@ -118,8 +119,8 @@ namespace YoutubeGenerator.Services
                 JsonFileService.Save(_bagShorts, bag);
 
                 _renderTracker?.CompleteShortProgress($"Short '{title}' queued for {nextSlot:HH:mm:ss} UTC");
-                _renderTracker?.AddLog("shorts", $"📅 Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (+10m cadence)");
-                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +10m cadence)");
+                _renderTracker?.AddLog("shorts", $"📅 Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (+3h cadence)");
+                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +3h cadence for {kind})");
                 return item;
             }
         }
@@ -131,7 +132,11 @@ namespace YoutubeGenerator.Services
             lock (_fileLock)
             {
                 var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
-                nextShort = bag.FirstOrDefault(s => !s.IsUploaded && File.Exists(s.FilePath));
+                // Pick next short that is not uploaded, file exists, and its channel is not currently backed off due to quota limit
+                nextShort = bag.FirstOrDefault(s =>
+                    !s.IsUploaded &&
+                    File.Exists(s.FilePath) &&
+                    (!_channelBackoff.TryGetValue(s.KindKey, out var backoffUntil) || DateTime.UtcNow >= backoffUntil));
             }
 
             if (nextShort == null)
@@ -141,8 +146,8 @@ namespace YoutubeGenerator.Services
             {
                 var creds = _profileService.GetYoutubeCredentials(nextShort.KindKey);
 
-                _renderTracker?.AddLog("shorts", $"🚀 Uploading Short '{nextShort.Title}' to YouTube (Slot: {nextShort.ScheduledPublishTime:yyyy-MM-dd HH:mm:ss} UTC)...");
-                _logger.LogInformation($"[ShortsScheduler] Uploading Short '{nextShort.Title}' to YouTube (Scheduled release: {nextShort.ScheduledPublishTime:yyyy-MM-dd HH:mm:ss} UTC)...");
+                _renderTracker?.AddLog("shorts", $"🚀 Uploading Short '{nextShort.Title}' to YouTube ({nextShort.KindKey.ToUpperInvariant()} - Slot: {nextShort.ScheduledPublishTime:yyyy-MM-dd HH:mm:ss} UTC)...");
+                _logger.LogInformation($"[ShortsScheduler] Uploading Short '{nextShort.Title}' to YouTube ({nextShort.KindKey} - Scheduled release: {nextShort.ScheduledPublishTime:yyyy-MM-dd HH:mm:ss} UTC)...");
 
                 string videoId = await _uploader.UploadAsync(
                     nextShort.FilePath,
@@ -205,6 +210,18 @@ namespace YoutubeGenerator.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"🚨 [ShortsScheduler] Failed to upload Short: {nextShort.Title}");
+
+                bool isRateLimit = ex.Message.Contains("uploadLimitExceeded", StringComparison.OrdinalIgnoreCase) ||
+                                   ex.Message.Contains("exceeded the number of videos", StringComparison.OrdinalIgnoreCase) ||
+                                   ex.Message.Contains("quota", StringComparison.OrdinalIgnoreCase);
+
+                if (isRateLimit)
+                {
+                    var backoffUntil = DateTime.UtcNow.AddHours(4);
+                    _channelBackoff[nextShort.KindKey] = backoffUntil;
+                    _renderTracker?.AddLog("shorts", $"⏳ YouTube daily upload limit reached for channel '{nextShort.KindKey}'. Channel backed off until {backoffUntil:HH:mm} UTC (other channels continue).");
+                    _logger.LogWarning($"[ShortsScheduler] Daily upload limit reached for '{nextShort.KindKey}'. Channel backed off until {backoffUntil:yyyy-MM-dd HH:mm:ss} UTC.");
+                }
             }
 
             return false;
