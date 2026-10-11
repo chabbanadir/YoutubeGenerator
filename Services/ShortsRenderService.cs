@@ -1,11 +1,13 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 using YoutubeGenerator.Interfaces;
+using YoutubeGenerator.Utils;
 
 namespace YoutubeGenerator.Services
 {
@@ -178,11 +180,17 @@ namespace YoutubeGenerator.Services
                 currentLayer = "[v_top]";
             }
 
-            // Bottom Like & Subscribe Sticker banner baked into video
+            // Bottom Like & Subscribe Sticker banner baked into video (2s midpoint pop)
             if (likeSubIdx.HasValue)
             {
+                double duration = await GetVideoDurationAsync(inputVideoPath);
+                double tStart = Math.Max(1.0, (duration / 2.0) - 1.0);
+                double tEnd = Math.Min(duration, tStart + 2.0);
+                string tStartStr = tStart.ToString("0.0", CultureInfo.InvariantCulture);
+                string tEndStr = tEnd.ToString("0.0", CultureInfo.InvariantCulture);
+
                 filter.Add($"[{likeSubIdx.Value}:v]scale=680:-1[sub]");
-                filter.Add($"{currentLayer}[sub]overlay=(W-w)/2:1500[v]");
+                filter.Add($"{currentLayer}[sub]overlay=(W-w)/2:1500:enable='between(t,{tStartStr},{tEndStr})'[v]");
                 currentLayer = "[v]";
             }
 
@@ -258,6 +266,12 @@ namespace YoutubeGenerator.Services
 
             if (hasOverlay)
             {
+                double duration = await GetVideoDurationAsync(inputVideoPath);
+                double tStart = Math.Max(1.0, (duration / 2.0) - 1.0);
+                double tEnd = Math.Min(duration, tStart + 2.0);
+                string tStartStr = tStart.ToString("0.0", CultureInfo.InvariantCulture);
+                string tEndStr = tEnd.ToString("0.0", CultureInfo.InvariantCulture);
+
                 inputArgs = $"-y -i \"{inputVideoPath}\" -i \"{likeSubscribePath}\"";
                 filterComplex =
                     $"[0:v]scale=1920:1080[norm];" +
@@ -266,7 +280,7 @@ namespace YoutubeGenerator.Services
                     $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
                     $"[cam][game]vstack=inputs=2,drawbox=y=676:color={dividerColor}:t=8[v1];" +
                     $"[1:v]scale=680:-1[sub];" +
-                    $"[v1][sub]overlay=(W-w)/2:1500[v]";
+                    $"[v1][sub]overlay=(W-w)/2:1500:enable='between(t,{tStartStr},{tEndStr})'[v]";
             }
             else
             {
@@ -284,6 +298,26 @@ namespace YoutubeGenerator.Services
 
             bool success = await RunFfmpegCommandAsync(args);
             return (success && File.Exists(outputPath)) ? outputPath : null;
+        }
+
+        private async Task<double> GetVideoDurationAsync(string videoPath)
+        {
+            try
+            {
+                var (exitCode, stdout, stderr) = await ProcessRunner.RunAsync(
+                    "ffprobe",
+                    $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{videoPath}\""
+                );
+                if (exitCode == 0 && double.TryParse(stdout.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out double duration))
+                {
+                    return duration;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"[Shorts] Failed to probe video duration for '{videoPath}'. Falling back to 15s.");
+            }
+            return 15.0;
         }
 
         private async Task<bool> ExtractProbeFrameAsync(string videoPath, string framePath, int secondOffset = 3)

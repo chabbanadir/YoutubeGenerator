@@ -88,7 +88,7 @@ namespace YoutubeGenerator.Services
 
             if (clips.Count == 1)
             {
-                await FinalizeToAacAsync(clips[0], finalOutputPath);
+                await FinalizeToAacAsync(clips[0], finalOutputPath, isFinalTarget: true);
                 return true;
             }
 
@@ -125,7 +125,7 @@ namespace YoutubeGenerator.Services
                     : $"[Pass {context.CurrentPass}/{context.TotalPasses}] Encoding intermediate batch of {clips.Count} segments -> {Path.GetFileName(outputPath)}";
                 _renderTracker?.AddLog(label, "step");
 
-                return await MergeSingleBatchWithTransitionsAsync(clips, outputPath, transitionType, transitionDuration, context.CurrentPass, context.TotalPasses, ct);
+                return await MergeSingleBatchWithTransitionsAsync(clips, outputPath, transitionType, transitionDuration, context.CurrentPass, context.TotalPasses, isFinalTarget, ct);
             }
 
             int batchChunksCount = (int)Math.Ceiling((double)clips.Count / maxBatchSize);
@@ -152,7 +152,7 @@ namespace YoutubeGenerator.Services
                     _renderTracker?.SetBatchInfo(context.CurrentPass, context.TotalPasses, batchClips.Count, chunkPath);
                     _renderTracker?.AddLog($"[Pass {context.CurrentPass}/{context.TotalPasses}] Encoding batch chunk {chunkIndex}/{batchChunksCount} ({batchClips.Count} clips) -> {Path.GetFileName(chunkPath)}", "step");
 
-                    bool success = await MergeSingleBatchWithTransitionsAsync(batchClips, chunkPath, transitionType, transitionDuration, context.CurrentPass, context.TotalPasses, ct);
+                    bool success = await MergeSingleBatchWithTransitionsAsync(batchClips, chunkPath, transitionType, transitionDuration, context.CurrentPass, context.TotalPasses, isFinalTarget: false, ct);
                     if (!success || !File.Exists(chunkPath))
                     {
                         _logger.LogError($"❌ Chunk rendering failed for pass {context.CurrentPass}");
@@ -209,13 +209,21 @@ namespace YoutubeGenerator.Services
             double transitionDuration,
             int currentPass,
             int totalPasses,
+            bool isFinalTarget,
             CancellationToken ct)
         {
             if (clips.Count == 1)
             {
-                await FinalizeToAacAsync(clips[0], outputPath);
+                await FinalizeToAacAsync(clips[0], outputPath, isFinalTarget);
                 return true;
             }
+
+            string overlayPath = Path.Combine(Directory.GetCurrentDirectory(), "workspace", "ressources", "overlays", "like_subscribe.png");
+            if (!File.Exists(overlayPath))
+            {
+                overlayPath = Path.Combine(AppContext.BaseDirectory, "workspace", "ressources", "overlays", "like_subscribe.png");
+            }
+            bool hasOverlay = isFinalTarget && File.Exists(overlayPath);
 
             // Stage 3.3: Probe clip durations
             _renderTracker?.SetStep(3, $"Probing {clips.Count} clips for durations & transition alignment");
@@ -277,6 +285,19 @@ namespace YoutubeGenerator.Services
                 prevAudioLabel = nextAudioLabel;
             }
 
+            if (hasOverlay)
+            {
+                double tStart = Math.Max(2.0, (accumulatedDuration / 2.0) - 1.0);
+                double tEnd = Math.Min(accumulatedDuration, tStart + 2.0);
+                string tStartStr = tStart.ToString("0.0", CultureInfo.InvariantCulture);
+                string tEndStr = tEnd.ToString("0.0", CultureInfo.InvariantCulture);
+
+                int overlayIdx = clips.Count;
+                sbFilter.AppendLine($"[{overlayIdx}:v]scale=680:-1[sub];");
+                sbFilter.AppendLine($"[vout][sub]overlay=(W-w)/2:H-h-120:enable='between(t,{tStartStr},{tEndStr})'[vfinal];");
+                _renderTracker?.AddLog($"[Montage] Like & Subscribe banner scheduled at midpoint {tStartStr}s - {tEndStr}s (2s duration)", "info");
+            }
+
             string outputDir = Path.GetDirectoryName(outputPath)!;
             if (!Directory.Exists(outputDir))
                 Directory.CreateDirectory(outputDir);
@@ -297,9 +318,14 @@ namespace YoutubeGenerator.Services
                 {
                     sbArgs.Append($"-i \"{clip}\" ");
                 }
+                if (hasOverlay)
+                {
+                    sbArgs.Append($"-i \"{overlayPath}\" ");
+                }
 
                 sbArgs.Append($"-filter_complex_script \"{scriptPath}\" ");
-                sbArgs.Append("-map \"[vout]\" -map \"[aout]\" ");
+                string vMap = hasOverlay ? "[vfinal]" : "[vout]";
+                sbArgs.Append($"-map \"{vMap}\" -map \"[aout]\" ");
 
                 bool isChunk = outputPath.Contains("chunk_");
                 string videoEncode = isChunk
@@ -404,15 +430,40 @@ namespace YoutubeGenerator.Services
             return 0;
         }
 
-        private async Task<bool> FinalizeToAacAsync(string input, string output)
+        private async Task<bool> FinalizeToAacAsync(string input, string output, bool isFinalTarget = false)
         {
-            string temp = output + ".aacfinal.mp4";
+            string overlayPath = Path.Combine(Directory.GetCurrentDirectory(), "workspace", "ressources", "overlays", "like_subscribe.png");
+            if (!File.Exists(overlayPath))
+            {
+                overlayPath = Path.Combine(AppContext.BaseDirectory, "workspace", "ressources", "overlays", "like_subscribe.png");
+            }
 
-            string args =
-                $"-y -i \"{input}\" " +
-                "-c:v copy " +
-                "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
-                $"\"{temp}\"";
+            string temp = output + ".aacfinal.mp4";
+            string args;
+            if (isFinalTarget && File.Exists(overlayPath))
+            {
+                double duration = await GetVideoDurationAsync(input);
+                double tStart = Math.Max(2.0, (duration / 2.0) - 1.0);
+                double tEnd = Math.Min(duration, tStart + 2.0);
+                string tStartStr = tStart.ToString("0.0", CultureInfo.InvariantCulture);
+                string tEndStr = tEnd.ToString("0.0", CultureInfo.InvariantCulture);
+
+                args =
+                    $"-y -i \"{input}\" -i \"{overlayPath}\" " +
+                    $"-filter_complex \"[1:v]scale=680:-1[sub];[0:v][sub]overlay=(W-w)/2:H-h-120:enable='between(t,{tStartStr},{tEndStr})'[v]\" " +
+                    "-map \"[v]\" -map 0:a? " +
+                    "-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p " +
+                    "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
+                    $"\"{temp}\"";
+            }
+            else
+            {
+                args =
+                    $"-y -i \"{input}\" " +
+                    "-c:v copy " +
+                    "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
+                    $"\"{temp}\"";
+            }
 
             _renderTracker?.AddLog($"[Finalize] Normalizing audio container for single clip...", "info");
 
