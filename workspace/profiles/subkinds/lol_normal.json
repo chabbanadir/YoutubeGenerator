@@ -3,6 +3,6 @@
   "SubKindKey": "normal",
   "IntroFile": "intro_lol.mp4",
   "TransitionAnimation": "fade",
-  "TransitionDuration": 2,
+  "TransitionDuration": 1,
   "MinMontageMinutes": 12
 }

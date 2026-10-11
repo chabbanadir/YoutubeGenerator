@@ -12,6 +12,7 @@ namespace YoutubeGenerator.workers
         private readonly ILogger<YoutubeWorker> _logger;
         private readonly IMontageProfileService _montageProfileService;
         private readonly IYoutubeUploader _uploader;
+        private readonly IThumbnailService _thumbnailService;
 
         private readonly string _bagYoutube;
         private readonly string _bagYoutubeDone;
@@ -23,12 +24,14 @@ namespace YoutubeGenerator.workers
             IWebHostEnvironment env,
             IMontageProfileService montageProfileService,
             ILogger<YoutubeWorker> logger,
-            IYoutubeUploader uploader)
+            IYoutubeUploader uploader,
+            IThumbnailService thumbnailService)
         {
             _llamaService = llamaService;
             _logger = logger;
             _montageProfileService = montageProfileService;
             _uploader = uploader;
+            _thumbnailService = thumbnailService;
 
             var root = Path.Combine(env.ContentRootPath, "workspace", "bags");
             _bagYoutube = Path.Combine(root, cfg.Value.BagYoutubePath);
@@ -83,6 +86,7 @@ namespace YoutubeGenerator.workers
 
                         metaItem.GeneratedTitle = gen.Title;
                         metaItem.GeneratedDescription = gen.Description;
+                        metaItem.GeneratedTags = gen.Tags ?? new List<string>();
 
                         JsonFileService.Save(_bagYoutube, bag);
                         try
@@ -114,13 +118,43 @@ namespace YoutubeGenerator.workers
                             _logger.LogInformation(
                                 $"📤 Uploading montage {metaItem.MontageId}  start — publish at {publishTime}");
 
+                            // 2️⃣ THUMBNAIL GENERATION (High-CTR 3-Point Visual Engine)
+                            string? thumbPath = null;
+                            try
+                            {
+                                thumbPath = await _thumbnailService.GenerateThumbnailAsync(metaItem);
+                                if (!string.IsNullOrEmpty(thumbPath))
+                                {
+                                    metaItem.GeneratedThumbnailPath = thumbPath;
+                                    JsonFileService.Save(_bagYoutube, bag);
+                                }
+                            }
+                            catch (Exception exThumb)
+                            {
+                                _logger.LogWarning(exThumb, $"⚠️ Failed to generate custom thumbnail for {metaItem.MontageId}, continuing with video upload.");
+                            }
+
                             string videoId = await _uploader.UploadAsync(
                                 metaItem.FinalVideoPath,
                                 metaItem.GeneratedTitle,
                                 metaItem.GeneratedDescription,
                                 creds,
-                                publishTime
+                                publishTime,
+                                metaItem.GeneratedTags
                             );
+
+                            // 3️⃣ THUMBNAIL UPLOAD
+                            if (!string.IsNullOrEmpty(thumbPath) && File.Exists(thumbPath))
+                            {
+                                try
+                                {
+                                    await _uploader.SetThumbnailAsync(videoId, thumbPath, creds);
+                                }
+                                catch (Exception exThumbUp)
+                                {
+                                    _logger.LogWarning(exThumbUp, $"⚠️ Failed to upload custom thumbnail for {videoId}");
+                                }
+                            }
 
                             // update stats
                             creds.UploadConfig.LastUploadTime = publishTime;

@@ -19,14 +19,8 @@ namespace YoutubeGenerator.Services
             _logger = logger;
         }
 
-        public async Task<string> UploadAsync(
-            string filePath,
-            string title,
-            string description,
-            YoutubeCredentials creds,
-            DateTime publishTimeUtc)
+        private YouTubeService CreateYouTubeService(YoutubeCredentials creds)
         {
-            // Build Google credential manually
             var token = new TokenResponse
             {
                 RefreshToken = creds.YoutubeRefreshToken
@@ -40,29 +34,40 @@ namespace YoutubeGenerator.Services
                         ClientId = creds.YoutubeClientId,
                         ClientSecret = creds.YoutubeClientSecret
                     },
-                    Scopes = new[] { YouTubeService.Scope.YoutubeUpload }
+                    Scopes = new[] { YouTubeService.Scope.YoutubeUpload, YouTubeService.Scope.Youtube }
                 });
 
             var credential = new UserCredential(flow, "user", token);
 
-            var youtube = new YouTubeService(new BaseClientService.Initializer
+            return new YouTubeService(new BaseClientService.Initializer
             {
                 HttpClientInitializer = credential,
                 ApplicationName = "YoutubeGenerator"
             });
+        }
 
-
+        public async Task<string> UploadAsync(
+            string filePath,
+            string title,
+            string description,
+            YoutubeCredentials creds,
+            DateTime publishTimeUtc,
+            IList<string>? tags = null)
+        {
+            var youtube = CreateYouTubeService(creds);
 
             var safeDescription = TextFormatter.FixDescription(description ?? "", 4800);
 
             var video = new Video
             {
-
                 Snippet = new VideoSnippet
                 {
                     Title = title,
                     Description = safeDescription,
-                    CategoryId = "24"
+                    CategoryId = "20", // 20 = Gaming (24 was Entertainment)
+                    DefaultLanguage = "en",
+                    DefaultAudioLanguage = "en",
+                    Tags = tags != null && tags.Count > 0 ? tags : null
                 },
                 Status = new VideoStatus
                 {
@@ -81,6 +86,44 @@ namespace YoutubeGenerator.Services
                 throw new Exception($"Upload failed: {response.Exception?.Message}");
 
             return request.ResponseBody.Id!;
+        }
+
+        public async Task<bool> SetThumbnailAsync(
+            string videoId,
+            string thumbnailPath,
+            YoutubeCredentials creds)
+        {
+            if (string.IsNullOrEmpty(thumbnailPath) || !File.Exists(thumbnailPath))
+            {
+                _logger.LogWarning($"Thumbnail file not found: {thumbnailPath}");
+                return false;
+            }
+
+            try
+            {
+                _logger.LogInformation($"🖼️ Setting custom thumbnail for video {videoId} from {thumbnailPath}");
+                var youtube = CreateYouTubeService(creds);
+
+                using var stream = new FileStream(thumbnailPath, FileMode.Open, FileAccess.Read);
+                var request = youtube.Thumbnails.Set(videoId, stream, "image/jpeg");
+                var response = await request.UploadAsync();
+
+                if (response.Status == UploadStatus.Completed)
+                {
+                    _logger.LogInformation($"✅ Custom thumbnail uploaded successfully for video {videoId}");
+                    return true;
+                }
+                else
+                {
+                    _logger.LogWarning($"⚠️ Custom thumbnail upload failed for {videoId}: {response.Exception?.Message}");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"Failed to upload custom thumbnail for video {videoId}");
+                return false;
+            }
         }
     }
 }

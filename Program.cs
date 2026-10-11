@@ -43,6 +43,7 @@ builder.Services.AddScoped<IProfileManagementService, ProfileManagementService>(
 builder.Services.AddSingleton<IRenderTrackerService, RenderTrackerService>();
 //builder.Services.AddScoped<VideoPipeline>();
 builder.Services.AddScoped<IYoutubeUploader, YoutubeUploader>();
+builder.Services.AddScoped<IThumbnailService, ThumbnailService>();
 builder.Services.AddScoped<IYoutubeAuthService, YoutubeAuthService>();
 builder.Services.AddScoped<IGitHubCsvFetcher, GitHubCsvFetcher>();
 builder.Services.Configure<CollectWorkerConfig>(

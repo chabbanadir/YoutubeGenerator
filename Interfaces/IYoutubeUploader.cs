@@ -1,4 +1,4 @@
-﻿using YoutubeGenerator.Models;
+using YoutubeGenerator.Models;
 
 namespace YoutubeGenerator.Interfaces
 {
@@ -9,6 +9,12 @@ namespace YoutubeGenerator.Interfaces
             string title,
             string description,
             YoutubeCredentials creds,
-            DateTime publishTimeUtc);
+            DateTime publishTimeUtc,
+            IList<string>? tags = null);
+
+        Task<bool> SetThumbnailAsync(
+            string videoId,
+            string thumbnailPath,
+            YoutubeCredentials creds);
     }
 }

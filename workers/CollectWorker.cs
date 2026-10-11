@@ -204,6 +204,9 @@ namespace YoutubeGenerator.Workers
                     var clip = downloadBag[i];
                     _logger.LogInformation($"🚀 Processing clip {clip.Link}");
 
+                    // Checker: Ensure subkind profile exists, auto-create default if missing
+                    _profiles.EnsureProfileExists(clip.KindKey, clip.SubKindKey);
+
                     var dirRaw = _pathService.GetRawDir(clip.KindKey, clip.SubKindKey, _rootPath);
                     var dirTrim = _pathService.GetTrimDir(clip.KindKey, clip.SubKindKey, _rootPath);
 

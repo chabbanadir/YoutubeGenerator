@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 
 namespace YoutubeGenerator.Models
 {
@@ -18,9 +18,11 @@ namespace YoutubeGenerator.Models
         public string SubKindKey { get; set; } = "";
         public string? GeneratedTitle { get; set; } 
         public string? GeneratedDescription { get; set; } 
+        public List<string> GeneratedTags { get; set; } = new();
         public bool Completed { get; set; } = false;
 
         public string? FinalVideoPath { get; set; }
+        public string? GeneratedThumbnailPath { get; set; }
 
 
         public string ToPromptString()

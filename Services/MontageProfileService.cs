@@ -32,15 +32,66 @@ namespace YoutubeGenerator.Services
         // -----------------------------
         public MontageProfile GetProfile(string kindKey, string subKindKey)
         {
-            string file = Path.Combine(_subKindsDir, $"{kindKey}_{subKindKey}.json");
+            var safeKind = string.IsNullOrWhiteSpace(kindKey) ? "lol" : kindKey.Trim().ToLower();
+            var safeSubKind = string.IsNullOrWhiteSpace(subKindKey) ? "normal" : subKindKey.Trim().ToLower();
+
+            string file = Path.Combine(_subKindsDir, $"{safeKind}_{safeSubKind}.json");
 
             if (!File.Exists(file))
             {
-                _logger.LogInformation($"Missing profile for {kindKey}/{subKindKey}");
-                string normal = Path.Combine(_subKindsDir, $"{kindKey}_normal.json");
-                return JsonFileService.Load<MontageProfile>(normal);
+                _logger.LogInformation($"🔍 Subkind profile not found for '{safeKind}/{safeSubKind}'. Auto-creating default profile as a copy of '{safeKind}_normal.json'...");
+
+                MontageProfile newProfile;
+                string normalFile = Path.Combine(_subKindsDir, $"{safeKind}_normal.json");
+
+                if (File.Exists(normalFile))
+                {
+                    var normal = JsonFileService.Load<MontageProfile>(normalFile);
+                    newProfile = new MontageProfile
+                    {
+                        KindKey = safeKind,
+                        SubKindKey = safeSubKind,
+                        IntroFile = normal.IntroFile,
+                        TransitionAnimation = normal.TransitionAnimation,
+                        TransitionDuration = normal.TransitionDuration,
+                        MinMontageMinutes = normal.MinMontageMinutes,
+                        FacebookLink = normal.FacebookLink,
+                        InstagramLink = normal.InstagramLink,
+                        TiktokLink = normal.TiktokLink
+                    };
+                }
+                else
+                {
+                    newProfile = new MontageProfile
+                    {
+                        KindKey = safeKind,
+                        SubKindKey = safeSubKind,
+                        IntroFile = $"intro_{safeKind}.mp4",
+                        TransitionAnimation = "fade",
+                        TransitionDuration = 1.0,
+                        MinMontageMinutes = 12.0
+                    };
+                }
+
+                try
+                {
+                    JsonFileService.Save(file, newProfile);
+                    _logger.LogInformation($"✅ Created and saved default profile for {safeKind}/{safeSubKind} at {file}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"🚨 Failed to persist auto-created profile to {file}");
+                }
+
+                return newProfile;
             }
+
             return JsonFileService.Load<MontageProfile>(file);
+        }
+
+        public MontageProfile EnsureProfileExists(string kindKey, string subKindKey)
+        {
+            return GetProfile(kindKey, subKindKey);
         }
 
         // --------------------------------

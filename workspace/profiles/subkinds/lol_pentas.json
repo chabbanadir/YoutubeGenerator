@@ -3,6 +3,6 @@
   "SubKindKey": "pentas",
   "IntroFile": "intro_lol.mp4",
   "TransitionAnimation": "fade",
-  "TransitionDuration": 3,
+  "TransitionDuration": 1,
   "MinMontageMinutes": 12
 }

@@ -37,7 +37,15 @@ namespace YoutubeGenerator.Services
         {
             var result = new MontageLLMResult();
 
-            if (package.Clips == null || !package.Clips.Any())
+            var streamers = package?.Clips?
+                .Select(c => c.Description)
+                .Where(d => !string.IsNullOrWhiteSpace(d))
+                .ToList();
+
+            var subKindKey = !string.IsNullOrWhiteSpace(package?.SubKindKey) ? package!.SubKindKey : profile.SubKindKey;
+            result.Tags = TagGenerator.GenerateTags(profile.KindKey, subKindKey, streamers);
+
+            if (package?.Clips == null || !package.Clips.Any())
             {
                 result.Title = $"{profile.KindKey} Highlights";
                 result.Description = "New highlights compilation!";
@@ -70,7 +78,10 @@ namespace YoutubeGenerator.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"[LlmService] Error generating metadata via LLM: {ex.Message}");
-                result.Title = $"{profile.KindKey} Montage - {DateTime.Now:MMM dd}";
+                var subKindLabel = !string.IsNullOrWhiteSpace(package.SubKindKey) && package.SubKindKey != "normal"
+                    ? $" {char.ToUpper(package.SubKindKey[0]) + (package.SubKindKey.Length > 1 ? package.SubKindKey.Substring(1) : "")}"
+                    : "";
+                result.Title = $"{profile.KindKey.ToUpper()}{subKindLabel} Montage - {DateTime.Now:MMM dd}";
                 result.Description = BuildFallbackDescription(package, profile);
             }
             finally
@@ -241,7 +252,8 @@ namespace YoutubeGenerator.Services
             sb.AppendLine();
             sb.AppendLine("## VIDEO INFORMATION:");
             sb.AppendLine($"- Game: {profile.KindKey}");
-            sb.AppendLine($"- Content Type: {profile.SubKindKey ?? "Highlights"}");
+            var contentType = !string.IsNullOrWhiteSpace(package.SubKindKey) ? package.SubKindKey : (profile.SubKindKey ?? "Highlights");
+            sb.AppendLine($"- Content Type: {contentType}");
             sb.AppendLine($"- Total Clips: {package.Clips.Count}");
             sb.AppendLine($"- Video Duration: {package.TotalDuration.TotalMinutes:F1} minutes");
             sb.AppendLine();
@@ -270,21 +282,21 @@ namespace YoutubeGenerator.Services
             sb.AppendLine();
 
             sb.AppendLine("## REQUIREMENTS:");
-            sb.AppendLine("### Title (45-70 characters):");
-            sb.AppendLine("- Must be catchy and SEO-optimized");
-            sb.AppendLine("- Include game name and content type");
-            sb.AppendLine("- Use emojis (🔥, ⚡, 🎯, 💥) strategically (1-2 emojis max)");
-            sb.AppendLine("- Make it clickable but not clickbait");
-            sb.AppendLine($"- Example style: '🔥 INSANE {profile.KindKey.ToUpper()} Plays - Epic Moments #127'");
+            sb.AppendLine("### Title (50-70 characters):");
+            sb.AppendLine("- High-CTR packaging: Front-load the biggest featured creator or play type, followed by an emotional hook");
+            sb.AppendLine("- Do NOT use generic episode numbers like '#127' or robotic filler text");
+            sb.AppendLine("- Include the game name naturally (e.g. 'LoL' or 'Valorant')");
+            sb.AppendLine("- 1 emoji maximum (e.g., 💀, 😱, 🔥, ⚡)");
+            sb.AppendLine($"- Proven top-channel style examples: 'FAKER DID IT AGAIN! 😱 Best LoL Highlights' or 'TENZ UNREAL 1v5 CLUTCH! 🔥 Valorant Highlights'");
             sb.AppendLine();
 
-            sb.AppendLine("### Description (100-250 words, maximum 1500 characters):");
-            sb.AppendLine("- Start with a hook (2-3 sentences)");
-            sb.AppendLine("- Mention top streamers featured");
-            sb.AppendLine("- Include relevant keywords naturally");
-            sb.AppendLine("- End with a call-to-action (subscribe/like)");
-            sb.AppendLine("- DO NOT include social media links or timestamps (I'll add them)");
-            sb.AppendLine("- Keep it concise and professional (must leave room for timestamps & links)");
+            sb.AppendLine("### Description (100-200 words, maximum 1200 characters):");
+            sb.AppendLine("- Front-load the first 2 sentences with an irresistible summary hook containing natural gaming keywords");
+            sb.AppendLine("- Mention the top creators featured naturally in the text");
+            sb.AppendLine("- Include a clear engagement call-to-action (e.g. 'Which play was your favorite? Let us know in the comments!')");
+            sb.AppendLine("- DO NOT include any links, URLs, or social media addresses");
+            sb.AppendLine("- DO NOT include timestamps (they are generated separately)");
+            sb.AppendLine("- Keep it punchy and engaging for YouTube Browse & Suggested algorithms");
             sb.AppendLine();
 
             sb.AppendLine("## OUTPUT FORMAT:");
@@ -307,24 +319,7 @@ namespace YoutubeGenerator.Services
                 sb.AppendLine();
             }
 
-            sb.AppendLine("⏱️ TIMESTAMPS:");
-            TimeSpan cumulativeTime = TimeSpan.Zero;
-            var timestampCount = 0;
-
-            foreach (var clip in package.Clips.Take(20))
-            {
-                if (clip != null && !string.IsNullOrWhiteSpace(clip.Description))
-                {
-                    sb.AppendLine($"{cumulativeTime:mm\\:ss} - {clip.Description}");
-                    cumulativeTime += clip.Duration;
-                    timestampCount++;
-                }
-            }
-
-            if (package.Clips.Count > timestampCount)
-            {
-                sb.AppendLine($"...and {package.Clips.Count - timestampCount} more epic moments!");
-            }
+            sb.Append(BuildSmartTimestamps(package));
             sb.AppendLine();
 
             var uniqueStreamers = package.Clips
@@ -336,32 +331,18 @@ namespace YoutubeGenerator.Services
 
             if (uniqueStreamers.Any())
             {
-                sb.AppendLine("🎮 FEATURED STREAMERS:");
-                foreach (var streamer in uniqueStreamers)
-                {
-                    sb.AppendLine($"🔸 https://www.twitch.tv/{streamer}");
-                }
+                sb.AppendLine("🎮 FEATURED CREATORS:");
+                sb.AppendLine(string.Join(", ", uniqueStreamers.Select(s => $"@{s}")));
                 sb.AppendLine();
             }
 
-            var hasSocial = !string.IsNullOrEmpty(profile.FacebookLink) ||
-                           !string.IsNullOrEmpty(profile.InstagramLink) ||
-                           !string.IsNullOrEmpty(profile.TiktokLink);
-
-            if (hasSocial)
+            var gameHashtags = (profile.KindKey ?? "").ToLower() switch
             {
-                sb.AppendLine("📱 FOLLOW US:");
-                if (!string.IsNullOrEmpty(profile.FacebookLink))
-                    sb.AppendLine($"▶️ Facebook: {profile.FacebookLink}");
-                if (!string.IsNullOrEmpty(profile.InstagramLink))
-                    sb.AppendLine($"📸 Instagram: {profile.InstagramLink}");
-                if (!string.IsNullOrEmpty(profile.TiktokLink))
-                    sb.AppendLine($"🎵 TikTok: {profile.TiktokLink}");
-                sb.AppendLine();
-            }
-
-            var kindKeyClean = profile.KindKey.Replace(" ", "");
-            sb.AppendLine($"#Gaming #{kindKeyClean} #Highlights #EpicMoments #Twitch #Compilation");
+                "lol" => "#LeagueOfLegends #LoLHighlights #LeagueOfLegendsClips #LoL",
+                "valorant" => "#VALORANT #ValorantHighlights #ValorantClips #VCT",
+                _ => $"#Gaming #{(profile.KindKey ?? "").Replace(" ", "")} #Highlights #GamingClips"
+            };
+            sb.AppendLine(gameHashtags);
 
             return TextFormatter.FixDescription(sb.ToString(), 4800);
         }
@@ -369,31 +350,168 @@ namespace YoutubeGenerator.Services
         private string BuildFallbackDescription(MontageItem package, MontageProfile profile)
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"Check out this amazing {profile.KindKey} compilation featuring the best moments from top streamers!");
+            var contentLabel = !string.IsNullOrWhiteSpace(package.SubKindKey) && package.SubKindKey != "normal"
+                ? $" {package.SubKindKey.ToUpper()}"
+                : "";
+            sb.AppendLine($"Check out this amazing {profile.KindKey}{contentLabel} compilation featuring the best moments from top streamers!");
             sb.AppendLine();
             sb.AppendLine("This video showcases incredible plays, funny moments, and epic highlights.");
+            sb.AppendLine();
+
+            sb.Append(BuildSmartTimestamps(package));
             sb.AppendLine();
 
             var streamers = package.Clips
                 .Select(c => c.Description)
                 .Where(d => !string.IsNullOrWhiteSpace(d))
                 .Distinct()
-                .Take(5)
+                .Take(10)
                 .ToList();
 
             if (streamers.Any())
             {
-                sb.AppendLine("Featured streamers:");
-                foreach (var s in streamers)
-                {
-                    sb.AppendLine($"🔸 https://www.twitch.tv/{s}");
-                }
+                sb.AppendLine("🎮 FEATURED CREATORS:");
+                sb.AppendLine(string.Join(", ", streamers.Select(s => $"@{s}")));
                 sb.AppendLine();
             }
 
             sb.AppendLine("Don't forget to like and subscribe for more content!");
+            sb.AppendLine();
+
+            var gameHashtags = (profile.KindKey ?? "").ToLower() switch
+            {
+                "lol" => "#LeagueOfLegends #LoLHighlights #LeagueOfLegendsClips #LoL",
+                "valorant" => "#VALORANT #ValorantHighlights #ValorantClips #VCT",
+                _ => $"#Gaming #{(profile.KindKey ?? "").Replace(" ", "")} #Highlights #GamingClips"
+            };
+            sb.AppendLine(gameHashtags);
 
             return TextFormatter.FixDescription(sb.ToString(), 4800);
+        }
+
+        private string BuildSmartTimestamps(MontageItem package)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("⏱️ TIMESTAMPS:");
+
+            if (package?.Clips == null || !package.Clips.Any())
+            {
+                sb.AppendLine("00:00 - Highlights");
+                return sb.ToString();
+            }
+
+            // Group consecutive clips by streamer to prevent duplicate timestamp spam
+            var blocks = new List<(string Streamer, TimeSpan StartTime, TimeSpan Duration, int ClipCount)>();
+            TimeSpan currentElapsed = TimeSpan.Zero;
+            string? currentStreamer = null;
+            TimeSpan blockStart = TimeSpan.Zero;
+            TimeSpan blockDuration = TimeSpan.Zero;
+            int blockCount = 0;
+
+            foreach (var clip in package.Clips)
+            {
+                var rawStreamer = string.IsNullOrWhiteSpace(clip.Description) ? "Highlights" : clip.Description.Trim();
+
+                if (currentStreamer == null)
+                {
+                    currentStreamer = rawStreamer;
+                    blockStart = currentElapsed;
+                    blockDuration = clip.Duration;
+                    blockCount = 1;
+                }
+                else if (string.Equals(currentStreamer, rawStreamer, StringComparison.OrdinalIgnoreCase))
+                {
+                    blockDuration += clip.Duration;
+                    blockCount++;
+                }
+                else
+                {
+                    blocks.Add((currentStreamer, blockStart, blockDuration, blockCount));
+                    currentStreamer = rawStreamer;
+                    blockStart = currentElapsed;
+                    blockDuration = clip.Duration;
+                    blockCount = 1;
+                }
+
+                currentElapsed += clip.Duration;
+            }
+
+            if (currentStreamer != null)
+            {
+                blocks.Add((currentStreamer, blockStart, blockDuration, blockCount));
+            }
+
+            var chapters = new List<(TimeSpan Time, string Label)>();
+
+            if (blocks.Count >= 3)
+            {
+                // Multi-streamer compilation: emit one chapter per creator block
+                foreach (var block in blocks)
+                {
+                    var label = block.Streamer == "Highlights"
+                        ? "Epic Highlights"
+                        : $"@{block.Streamer} Highlights";
+
+                    if (!chapters.Any())
+                    {
+                        chapters.Add((TimeSpan.Zero, label));
+                    }
+                    else if (block.StartTime - chapters.Last().Time >= TimeSpan.FromSeconds(10))
+                    {
+                        chapters.Add((block.StartTime, label));
+                    }
+                }
+            }
+            else
+            {
+                // Single or duo streamer montage: distribute chronological chapters across milestones
+                chapters.Add((TimeSpan.Zero, blocks.Any() && blocks[0].Streamer != "Highlights"
+                    ? $"@{blocks[0].Streamer} Opening Plays"
+                    : "Opening Highlights"));
+
+                TimeSpan runningTime = TimeSpan.Zero;
+                int part = 2;
+                foreach (var clip in package.Clips)
+                {
+                    runningTime += clip.Duration;
+                    if (runningTime - chapters.Last().Time >= TimeSpan.FromSeconds(60) &&
+                        runningTime < package.TotalDuration - TimeSpan.FromSeconds(15))
+                    {
+                        var streamerPrefix = !string.IsNullOrWhiteSpace(clip.Description) ? $"@{clip.Description} " : "";
+                        chapters.Add((runningTime, $"{streamerPrefix}Highlights Part {part++}"));
+                    }
+                }
+            }
+
+            // YouTube requires at least 3 chapters in ascending order starting at 00:00
+            if (chapters.Count < 3 && package.TotalDuration > TimeSpan.FromSeconds(30))
+            {
+                chapters.Clear();
+                var mainStreamer = package.Clips.FirstOrDefault()?.Description;
+                var prefix = !string.IsNullOrWhiteSpace(mainStreamer) ? $"@{mainStreamer} " : "";
+                var midpoint = TimeSpan.FromSeconds(package.TotalDuration.TotalSeconds / 2);
+
+                chapters.Add((TimeSpan.Zero, $"{prefix}Opening Moments"));
+                chapters.Add((midpoint, $"{prefix}Mid-Game Action"));
+                chapters.Add((package.TotalDuration - TimeSpan.FromSeconds(15), $"{prefix}Final Clutches"));
+            }
+
+            // Ensure first chapter is always 00:00
+            if (!chapters.Any())
+            {
+                chapters.Add((TimeSpan.Zero, "Highlights"));
+            }
+            else if (chapters[0].Time != TimeSpan.Zero)
+            {
+                chapters[0] = (TimeSpan.Zero, chapters[0].Label);
+            }
+
+            foreach (var ch in chapters)
+            {
+                sb.AppendLine($"{ch.Time:mm\\:ss} - {ch.Label}");
+            }
+
+            return sb.ToString();
         }
 
         private string CleanTitle(string title)
