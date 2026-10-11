@@ -50,7 +50,7 @@ namespace YoutubeGenerator.Services
 
             // Generate viral Short title, description, and tags via LLM
             _logger.LogInformation($"🤖 Generating AI metadata via LLM for Short ({kind}/{subKind}, Streamer: @{streamer})");
-            var meta = await _llmService.GenerateShortMetadataAsync(kind, subKind, streamer, clip.Title);
+            var meta = await _llmService.GenerateShortMetadataAsync(kind, subKind, streamer, $"{subKind} highlight by @{streamer}");
 
             string title = meta.Title;
             string description = meta.Description;
