@@ -175,7 +175,7 @@ namespace YoutubeGenerator.Services
 
             // Priority 3: Fallback intro video
             var kind = (package.KindKey ?? "").ToLower();
-            string introFallback = kind.Contains("val")
+            string introFallback = (kind.Contains("val") || kind.Contains("gaming"))
                 ? Path.Combine(_env.ContentRootPath, "workspace", "ressources", "valo_intro.mp4")
                 : Path.Combine(_env.ContentRootPath, "workspace", "ressources", "intro_lol.mp4");
 

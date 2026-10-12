@@ -1,0 +1,8 @@
+{
+  "KindKey": "gaming",
+  "SubKindKey": "highlight",
+  "IntroFile": "valo_intro.mp4",
+  "TransitionAnimation": "fade",
+  "TransitionDuration": 1,
+  "MinMontageMinutes": 12
+}

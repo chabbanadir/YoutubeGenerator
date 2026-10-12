@@ -62,11 +62,15 @@ namespace YoutubeGenerator.Services
                 }
                 else
                 {
+                    string defaultIntro = (safeKind.Contains("val") || safeKind == "gaming")
+                        ? "valo_intro.mp4"
+                        : $"intro_{safeKind}.mp4";
+
                     newProfile = new MontageProfile
                     {
                         KindKey = safeKind,
                         SubKindKey = safeSubKind,
-                        IntroFile = $"intro_{safeKind}.mp4",
+                        IntroFile = defaultIntro,
                         TransitionAnimation = "fade",
                         TransitionDuration = 1.0,
                         MinMontageMinutes = 12.0
@@ -99,7 +103,31 @@ namespace YoutubeGenerator.Services
         // --------------------------------
         public YoutubeCredentials GetYoutubeCredentials(string kindKey)
         {
-            string file = Path.Combine(_kindsDir, $"{kindKey}.json");
+            var safeKey = string.IsNullOrWhiteSpace(kindKey) ? "lol" : kindKey.Trim().ToLower();
+            if (safeKey == "valo") safeKey = "valorant";
+
+            string file = Path.Combine(_kindsDir, $"{safeKey}.json");
+
+            if (!File.Exists(file))
+            {
+                // Fallback aliases: if gaming, highlight, or valo, try valorant.json
+                if (safeKey == "gaming" || safeKey == "highlight" || safeKey.Contains("val"))
+                {
+                    var valFile = Path.Combine(_kindsDir, "valorant.json");
+                    if (File.Exists(valFile))
+                    {
+                        file = valFile;
+                    }
+                }
+                else
+                {
+                    var lolFile = Path.Combine(_kindsDir, "lol.json");
+                    if (File.Exists(lolFile))
+                    {
+                        file = lolFile;
+                    }
+                }
+            }
 
             if (!File.Exists(file))
                 throw new Exception($"Missing YouTube credentials for {kindKey}");

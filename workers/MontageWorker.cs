@@ -132,9 +132,17 @@ namespace YoutubeGenerator.workers
                         packageToRender.SubKindKey
                     );
 
-                    string introPath = Path.Combine(_dirResources, profile.IntroFile);
-                    _logger.LogInformation($"📼 Intro path: {introPath}");
-                    _renderTracker?.AddLog($"[Assets] Intro file: {profile.IntroFile}, Transition: {profile.TransitionAnimation} ({profile.TransitionDuration}s)", "info");
+                    string? introPath = ResolveIntroPath(profile.IntroFile, packageToRender.KindKey);
+                    if (!string.IsNullOrEmpty(introPath))
+                    {
+                        _logger.LogInformation($"📼 Intro path resolved: {introPath}");
+                        _renderTracker?.AddLog($"[Assets] Intro file: {Path.GetFileName(introPath)}, Transition: {profile.TransitionAnimation} ({profile.TransitionDuration}s)", "info");
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"⚠️ No intro file found for '{profile.IntroFile}' / kind '{packageToRender.KindKey}' in '{_dirResources}'. Montage will proceed without intro.");
+                        _renderTracker?.AddLog($"[Assets] ⚠️ Intro file '{profile.IntroFile}' not found. Continuing montage without intro.", "warning");
+                    }
 
                     // Directories for montage/trim
                     var dirMontage = _pathService.GetMontageDir(
@@ -157,17 +165,28 @@ namespace YoutubeGenerator.workers
 
                     // Stage 3.2: Intro stitching
                     string firstClipPath = packageToRender.Clips.First().File;
+                    string newFirstClip = firstClipPath;
 
-                    await _trimService.PrependIntroAsync(
-                        introPath,
-                        firstClipPath,
-                        dirTrim
-                    );
-
-                    var newFirstClip = Path.Combine(dirTrim, Path.GetFileName(firstClipPath));
-                    if (!File.Exists(newFirstClip))
+                    if (!string.IsNullOrEmpty(introPath) && File.Exists(introPath))
                     {
-                        newFirstClip = firstClipPath;
+                        bool stitched = await _trimService.PrependIntroAsync(
+                            introPath,
+                            firstClipPath,
+                            dirTrim
+                        );
+
+                        if (stitched)
+                        {
+                            var candidateFirst = Path.Combine(dirTrim, Path.GetFileName(firstClipPath));
+                            if (File.Exists(candidateFirst))
+                            {
+                                newFirstClip = candidateFirst;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _renderTracker?.UpdateStepProgress(2, 100, "Intro skipped (not configured/found)");
                     }
 
                     // Update package's first clip path
@@ -249,6 +268,57 @@ namespace YoutubeGenerator.workers
                 worker.Status = false;
                 JsonFileService.Save(_workerFile, worker);
             }
+        }
+
+        private string? ResolveIntroPath(string configuredIntroFile, string kindKey)
+        {
+            if (string.IsNullOrWhiteSpace(_dirResources) || !Directory.Exists(_dirResources))
+                return null;
+
+            // 1. Direct configured file match
+            if (!string.IsNullOrWhiteSpace(configuredIntroFile))
+            {
+                string directPath = Path.Combine(_dirResources, configuredIntroFile);
+                if (File.Exists(directPath))
+                    return directPath;
+            }
+
+            var safeKind = (kindKey ?? "").Trim().ToLower();
+            var safeIntro = (configuredIntroFile ?? "").Trim().ToLower();
+
+            // 2. Kind-specific fallbacks (Valorant / Gaming)
+            if (safeKind.Contains("val") || safeIntro.Contains("val") || safeKind == "gaming")
+            {
+                var candidates = new[] { "valo_intro.mp4", "intro_valo.mp4", "intro_valorant.mp4", "valorant_intro.mp4", "intro_gaming.mp4" };
+                foreach (var name in candidates)
+                {
+                    string p = Path.Combine(_dirResources, name);
+                    if (File.Exists(p)) return p;
+                }
+            }
+
+            // 3. Kind-specific fallbacks (LoL)
+            if (safeKind.Contains("lol") || safeIntro.Contains("lol"))
+            {
+                var candidates = new[] { "intro_lol.mp4", "intro_lol2.mp4", "lol_intro.mp4" };
+                foreach (var name in candidates)
+                {
+                    string p = Path.Combine(_dirResources, name);
+                    if (File.Exists(p)) return p;
+                }
+            }
+
+            // 4. Any mp4 file with 'intro' in the name
+            try
+            {
+                var anyIntro = Directory.GetFiles(_dirResources, "*.mp4")
+                    .FirstOrDefault(f => Path.GetFileName(f).Contains("intro", StringComparison.OrdinalIgnoreCase));
+                if (anyIntro != null && File.Exists(anyIntro))
+                    return anyIntro;
+            }
+            catch { }
+
+            return null;
         }
     }
 }

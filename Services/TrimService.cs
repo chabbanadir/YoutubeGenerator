@@ -109,10 +109,16 @@ namespace YoutubeGenerator.Services
             string tempOutputPath = Path.Combine(workingDir, $"intro_temp_{Guid.NewGuid():N}.mp4");
 
             if (!File.Exists(introPath))
-                throw new FileNotFoundException("Intro video not found", introPath);
+            {
+                _renderTracker?.AddLog($"[Intro] ⚠️ Intro video not found at '{introPath}'. Skipping intro prepend.", "warning");
+                return false;
+            }
 
             if (!File.Exists(firstClipPath))
-                throw new FileNotFoundException("First trimmed clip not found", firstClipPath);
+            {
+                _renderTracker?.AddLog($"[Intro] ⚠️ First clip not found at '{firstClipPath}'. Cannot prepend intro.", "warning");
+                return false;
+            }
 
             _renderTracker?.SetStep(2, $"Stitching intro '{Path.GetFileName(introPath)}' with first clip");
             _renderTracker?.AddLog($"[Intro] Prepending intro video: {Path.GetFileName(introPath)}", "step");
