@@ -22,5 +22,6 @@ namespace YoutubeGenerator.Models
         public bool IsTikTokUploaded { get; set; }
         public string? TikTokPublishId { get; set; }
         public DateTime? TikTokUploadedAt { get; set; }
+        public string? TikTokCaption { get; set; }
     }
 }

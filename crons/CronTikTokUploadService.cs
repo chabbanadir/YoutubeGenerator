@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
@@ -23,6 +25,7 @@ namespace YoutubeGenerator.crons
         private readonly IConfiguration _config;
         private readonly string _bagShorts;
         private readonly string _backoffFile;
+        private readonly string _kindsDir;
         private static readonly object _fileLock = new();
 
         // In-memory tracker for cadence and daily quota per channel
@@ -44,6 +47,7 @@ namespace YoutubeGenerator.crons
             Directory.CreateDirectory(bagsDir);
             _bagShorts = Path.Combine(bagsDir, "bag_shorts.json");
             _backoffFile = Path.Combine(bagsDir, "tiktok_backoff.json");
+            _kindsDir = Path.Combine(env.ContentRootPath, "workspace", "profiles", "kinds");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -148,15 +152,20 @@ namespace YoutubeGenerator.crons
 
                 if (candidate == null) continue;
 
-                _logger.LogInformation($"[CronTikTok] 🚀 Starting upload to TikTok for '{kindKey}': '{candidate.Title}'");
-                renderTracker?.AddLog("tiktok", $"🚀 Publishing Short to TikTok: '{candidate.Title}' ({kindKey.ToUpperInvariant()})...");
+                var caption = !string.IsNullOrWhiteSpace(candidate.TikTokCaption) 
+                    ? candidate.TikTokCaption 
+                    : BuildTikTokCaption(candidate);
+
+                var (_, channelTitleForLog) = GetLinkedChannelInfo(candidate.KindKey);
+                _logger.LogInformation($"[CronTikTok] 🚀 Starting upload to TikTok for '{kindKey}': '{candidate.Title}' with linked YouTube channel '{channelTitleForLog}'");
+                renderTracker?.AddLog("tiktok", $"🚀 Publishing Short to TikTok: '{candidate.Title}' ({kindKey.ToUpperInvariant()}) [Linked YT: {channelTitleForLog}]...");
 
                 try
                 {
                     var (success, publishId, message) = await uploader.UploadVideoAsync(
                         candidate.KindKey,
                         candidate.FilePath,
-                        candidate.Title,
+                        caption,
                         "SELF_ONLY" // Sandbox defaults to self_only; Direct Post or Inbox
                     );
 
@@ -181,6 +190,7 @@ namespace YoutubeGenerator.crons
                                 match.IsTikTokUploaded = true;
                                 match.TikTokPublishId = publishId;
                                 match.TikTokUploadedAt = DateTime.UtcNow;
+                                match.TikTokCaption = caption;
                                 JsonFileService.Save(_bagShorts, bag);
                             }
                         }
@@ -246,6 +256,113 @@ namespace YoutubeGenerator.crons
                     _logger.LogError(ex, $"[CronTikTok] Exception during TikTok upload for '{candidate.Title}'");
                 }
             }
+        }
+
+        private (string ChannelId, string ChannelTitle) GetLinkedChannelInfo(string kindKey)
+        {
+            try
+            {
+                var profilePath = Path.Combine(_kindsDir, $"{kindKey.ToLowerInvariant()}.json");
+                if (File.Exists(profilePath))
+                {
+                    var json = File.ReadAllText(profilePath);
+                    using var doc = JsonDocument.Parse(json);
+                    var root = doc.RootElement;
+
+                    string id = "";
+                    if (root.TryGetProperty("YoutubeChannelId", out var idProp) && idProp.ValueKind == JsonValueKind.String)
+                    {
+                        id = idProp.GetString() ?? "";
+                    }
+
+                    string title = "";
+                    if (root.TryGetProperty("YoutubeChannelTitle", out var titleProp) && titleProp.ValueKind == JsonValueKind.String)
+                    {
+                        title = titleProp.GetString() ?? "";
+                    }
+
+                    return (id, title);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, $"[CronTikTok] Could not read channel info for profile '{kindKey}'");
+            }
+
+            return ("", "");
+        }
+
+        public string BuildTikTokCaption(ShortItem candidate)
+        {
+            var sb = new StringBuilder();
+
+            // 1. Hook / Title
+            string title = candidate.Title?.Trim() ?? "New Gaming Play";
+            sb.AppendLine(title);
+            sb.AppendLine();
+
+            // 2. Streamer attribution if present
+            if (!string.IsNullOrWhiteSpace(candidate.Streamer))
+            {
+                var streamer = candidate.Streamer.Trim().TrimStart('@');
+                sb.AppendLine($"🎮 Streamer: @{streamer}");
+            }
+
+            // 3. YouTube Channel cross-promotion ("couverture")
+            var (channelId, channelTitle) = GetLinkedChannelInfo(candidate.KindKey);
+            if (string.IsNullOrWhiteSpace(channelTitle))
+            {
+                channelTitle = candidate.KindKey.ToLowerInvariant() switch
+                {
+                    "lol" => "Summoner's Spells",
+                    "valorant" => "Daily Dose Of Valorant",
+                    "gaming" => "Daily Dose Of Valorant",
+                    _ => $"{candidate.KindKey.ToUpperInvariant()} Highlights"
+                };
+            }
+
+            sb.AppendLine($"📺 YouTube: {channelTitle}");
+
+            if (!string.IsNullOrWhiteSpace(channelId))
+            {
+                sb.AppendLine($"🔗 https://www.youtube.com/channel/{channelId}");
+            }
+
+            // 4. Direct YouTube Short link if already uploaded
+            if (!string.IsNullOrWhiteSpace(candidate.YoutubeVideoId))
+            {
+                sb.AppendLine($"🎬 YouTube Short: https://youtube.com/shorts/{candidate.YoutubeVideoId}");
+            }
+
+            sb.AppendLine("👉 Link in bio for daily highlights!");
+            sb.AppendLine();
+
+            // 5. High-reach viral hashtags for algorithmic coverage (couverture)
+            var kind = candidate.KindKey.ToLowerInvariant();
+            var subKind = (candidate.SubKindKey ?? "").ToLowerInvariant();
+
+            var gameTags = kind switch
+            {
+                "lol" => subKind.Contains("penta")
+                    ? "#LoL #LeagueOfLegends #PentaKill #Outplay #LeagueOfLegendsClips #Gaming #Shorts #fyp #foryou #viral"
+                    : "#LoL #LeagueOfLegends #Outplay #LeagueOfLegendsClips #Gaming #Shorts #fyp #foryou #viral",
+                "valorant" => subKind.Contains("ace")
+                    ? "#Valorant #ValorantClips #ValorantAce #Radiant #Gaming #Shorts #fyp #foryou #viral"
+                    : "#Valorant #ValorantClips #ValorantHighlights #Gaming #Shorts #fyp #foryou #viral",
+                _ => $"#{candidate.KindKey} #Gaming #Clips #Shorts #fyp #foryou #viral"
+            };
+
+            sb.Append(gameTags);
+
+            var caption = sb.ToString().Trim();
+
+            // Safety limit (TikTok max is 2200 chars)
+            if (caption.Length > 2000)
+            {
+                caption = caption.Substring(0, 1995) + "...";
+            }
+
+            return caption;
         }
     }
 }
