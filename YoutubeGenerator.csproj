@@ -29,6 +29,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Content Remove="workspace\**" />
 		<Content Update="Services\**\*.py">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
