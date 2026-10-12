@@ -6,6 +6,7 @@ export function renderOverview(data) {
 
   renderKpiCards(data.kpis, data.channels);
   renderYoutubeAccountsHub(data.channels);
+  renderPublicationQueue(data.publicationQueue);
   renderRecentPublishedShowcase(data.recentPublished);
   renderWorkerTelemetry(data.workers);
   renderRecentActivity(data.recentActivity);
@@ -160,6 +161,8 @@ export function renderYoutubeAccountsHub(channels = []) {
     const lastUploadFormatted = ch.lastUploadTime ? formatDate(ch.lastUploadTime) : 'None Recorded';
 
     const badgeTheme = kindKey === 'lol' ? 'lol' : (kindKey === 'valorant' ? 'valorant' : 'default');
+    const rawTikTokName = ch.tikTokDisplayName || 'TikTok Linked';
+    const tikTokDisplay = rawTikTokName.length > 12 ? rawTikTokName.substring(0, 11) + '…' : rawTikTokName;
 
     return `
       <div class="yt-channel-card">
@@ -173,7 +176,7 @@ export function renderYoutubeAccountsHub(channels = []) {
                 <span class="profile-kind-badge ${badgeTheme}" style="font-size: 0.68rem; padding: 0.1rem 0.45rem;">
                   ${escapeHtml(kindTitle)}
                 </span>
-                <span style="font-size: 0.88rem; font-weight: 700;">${escapeHtml(channelTitle)}</span>
+                <span class="yt-channel-title-text" title="${escapeHtml(channelTitle)}">${escapeHtml(channelTitle)}</span>
               </div>
               <div class="yt-channel-id-row">
                 <span>ID:</span>
@@ -186,14 +189,14 @@ export function renderYoutubeAccountsHub(channels = []) {
               </div>
             </div>
           </div>
-          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem;">
+          <div class="yt-channel-pills-col">
             <span class="yt-channel-status-pill ${isConnected ? 'connected' : 'disconnected'}" title="YouTube OAuth Status">
               <i data-lucide="${isConnected ? 'check-circle-2' : 'alert-circle'}" style="width: 12px; height: 12px;"></i>
               ${isConnected ? 'YouTube' : 'YouTube Off'}
             </span>
-            <span class="yt-channel-status-pill ${ch.isTikTokConnected ? 'connected' : 'disconnected'}" style="${ch.isTikTokConnected ? 'border-color: rgba(34, 211, 238, 0.4); color: #22d3ee;' : ''}" title="TikTok Integration Status">
+            <span class="yt-channel-status-pill ${ch.isTikTokConnected ? 'connected' : 'disconnected'}" style="${ch.isTikTokConnected ? 'border-color: rgba(34, 211, 238, 0.4); color: #22d3ee;' : ''}" title="TikTok Integration: ${escapeHtml(rawTikTokName)}">
               ${getTiktokIcon(12, 'margin-right: 3px;')}
-              ${ch.isTikTokConnected ? (ch.tikTokDisplayName ? escapeHtml(ch.tikTokDisplayName) : 'TikTok Linked') : 'TikTok Off'}
+              ${ch.isTikTokConnected ? escapeHtml(tikTokDisplay) : 'TikTok Off'}
             </span>
           </div>
         </div>
@@ -238,6 +241,208 @@ export function renderYoutubeAccountsHub(channels = []) {
       </div>
     `;
   }).join('');
+}
+
+// 2.5 Scheduled Publication Queue & Release Radar
+let currentQueueData = null;
+let currentQueueFilter = 'all';
+
+export function filterPublicationQueue(filter) {
+  currentQueueFilter = filter;
+  ['all', 'short', 'montage', 'published'].forEach(f => {
+    const btn = document.getElementById(`filterQueue${f.charAt(0).toUpperCase() + f.slice(1)}`);
+    if (btn) {
+      if (f === filter) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+  renderPublicationQueueItems();
+}
+window.filterPublicationQueue = filterPublicationQueue;
+
+export function renderPublicationQueue(data) {
+  currentQueueData = data || { totalCount: 0, items: [], recentPublished: [] };
+  const upcoming = currentQueueData.items || [];
+  const published = currentQueueData.recentPublished || [];
+
+  const countAll = upcoming.length;
+  const countShorts = upcoming.filter(x => x.type === 'short').length;
+  const countMontages = upcoming.filter(x => x.type === 'montage').length;
+  const countPublished = published.length;
+
+  const elAll = document.getElementById('queueCountAll');
+  if (elAll) elAll.textContent = countAll;
+  const elShorts = document.getElementById('queueCountShorts');
+  if (elShorts) elShorts.textContent = countShorts;
+  const elMontages = document.getElementById('queueCountMontages');
+  if (elMontages) elMontages.textContent = countMontages;
+  const elPub = document.getElementById('queueCountPublished');
+  if (elPub) elPub.textContent = countPublished;
+
+  const nextPillText = document.getElementById('queueNextText');
+  if (nextPillText) {
+    if (currentQueueData.nextReleaseTime) {
+      const nextDate = new Date(currentQueueData.nextReleaseTime);
+      const timeStr = nextDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      nextPillText.textContent = `Next Release: ${timeStr} (${currentQueueData.nextCountdown || 'Upcoming'})`;
+    } else if (countAll > 0) {
+      nextPillText.textContent = `${countAll} video(s) ready in queue`;
+    } else {
+      nextPillText.textContent = 'Queue is idle';
+    }
+  }
+
+  renderPublicationQueueItems();
+}
+
+function renderPublicationQueueItems() {
+  const container = document.getElementById('publicationQueueGrid');
+  if (!container) return;
+
+  if (!currentQueueData) {
+    container.innerHTML = `
+      <div class="queue-empty-box">
+        <i data-lucide="clock" style="width: 24px; height: 24px; color: var(--text-muted);"></i>
+        <div>No scheduled publication items found.</div>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  let items = [];
+  if (currentQueueFilter === 'all') {
+    items = currentQueueData.items || [];
+  } else if (currentQueueFilter === 'short') {
+    items = (currentQueueData.items || []).filter(x => x.type === 'short');
+  } else if (currentQueueFilter === 'montage') {
+    items = (currentQueueData.items || []).filter(x => x.type === 'montage');
+  } else if (currentQueueFilter === 'published') {
+    items = currentQueueData.recentPublished || [];
+  }
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div class="queue-empty-box">
+        <i data-lucide="inbox" style="width: 28px; height: 28px; color: var(--accent-cyan); opacity: 0.6;"></i>
+        <div style="font-weight: 600; color: var(--text-main);">No items matching this filter</div>
+        <div style="font-size: 0.78rem;">${currentQueueFilter === 'published' ? 'No recent published items recorded yet.' : 'Pipeline queue is clear. New clips or montages will appear here once queued.'}</div>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+
+  container.innerHTML = items.map(item => {
+    const isShort = item.type === 'short';
+    const kindKey = (item.kindKey || 'lol').toLowerCase();
+    const badgeTheme = kindKey === 'lol' ? 'lol' : (kindKey === 'valorant' ? 'valorant' : 'default');
+    const streamer = item.streamer ? escapeHtml(item.streamer) : 'Streamer';
+    const title = escapeHtml(item.title || 'Untitled Video');
+    const duration = item.durationFormatted || '--';
+
+    // Format Scheduled Time
+    let scheduleBadgeHtml = '';
+    let isImminent = false;
+    if (item.scheduledPublishTimeUtc) {
+      const pubDate = new Date(item.scheduledPublishTimeUtc);
+      const isToday = new Date().toDateString() === pubDate.toDateString();
+      const timeStr = pubDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = isToday ? 'Today' : pubDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+      const diffMs = pubDate.getTime() - Date.now();
+      const diffHours = diffMs / (1000 * 60 * 60);
+
+      let badgeClass = 'future';
+      if (diffHours > 0 && diffHours <= 1) {
+        badgeClass = 'imminent';
+        isImminent = true;
+      } else if (isToday && diffHours > 0) {
+        badgeClass = 'today';
+      } else if (diffHours <= 0 && !item.isUploadedYt) {
+        badgeClass = 'ready';
+      }
+
+      scheduleBadgeHtml = `
+        <span class="queue-schedule-badge ${badgeClass}" title="Scheduled for ${pubDate.toLocaleString()}">
+          <i data-lucide="calendar" style="width: 11px; height: 11px;"></i>
+          ${dateStr} ${timeStr} • ${escapeHtml(item.countdown)}
+        </span>
+      `;
+    } else {
+      scheduleBadgeHtml = `
+        <span class="queue-schedule-badge ready">
+          <i data-lucide="play-circle" style="width: 11px; height: 11px;"></i>
+          ${escapeHtml(item.countdown || 'Queued')}
+        </span>
+      `;
+    }
+
+    // Platform status pills
+    const ytPill = item.isUploadedYt
+      ? `<span class="queue-platform-pill uploaded"><i data-lucide="check-circle" style="width: 11px; height: 11px;"></i> YouTube Live</span>`
+      : `<span class="queue-platform-pill pending"><i data-lucide="clock" style="width: 11px; height: 11px;"></i> YouTube Scheduled</span>`;
+
+    const tikTokPill = item.isUploadedTikTok
+      ? `<span class="queue-platform-pill uploaded">${getTiktokIcon(10, 'margin-right: 2px;')} TikTok Live</span>`
+      : isShort
+        ? `<span class="queue-platform-pill pending">${getTiktokIcon(10, 'margin-right: 2px;')} TikTok Pending</span>`
+        : `<span class="queue-platform-pill off">${getTiktokIcon(10, 'margin-right: 2px;')} N/A</span>`;
+
+    return `
+      <div class="queue-item-card ${isImminent ? 'is-imminent' : ''}">
+        <div class="queue-item-header">
+          <div class="queue-item-badges">
+            <span class="queue-format-badge ${isShort ? 'short' : 'montage'}">
+              ${isShort ? 'Short 9:16' : 'Montage 16:9'}
+            </span>
+            <span class="profile-kind-badge ${badgeTheme}" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">
+              ${escapeHtml(kindKey.toUpperCase())}
+            </span>
+            ${item.subKindKey ? `
+              <span class="tag-chip" style="font-size: 0.65rem; padding: 0.1rem 0.4rem; background: rgba(255,255,255,0.06);">
+                ${escapeHtml(item.subKindKey.toUpperCase())}
+              </span>
+            ` : ''}
+          </div>
+          ${scheduleBadgeHtml}
+        </div>
+
+        <div class="queue-item-title" title="${title}">
+          ${title}
+        </div>
+
+        <div class="queue-item-meta-row">
+          <span class="queue-streamer-chip">
+            <i data-lucide="user" style="width: 11px; height: 11px;"></i> @${streamer}
+          </span>
+          <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.25rem;">
+            <i data-lucide="clock" style="width: 11px; height: 11px;"></i> ${escapeHtml(duration)}
+          </span>
+        </div>
+
+        <div class="queue-item-platforms">
+          <div class="queue-platforms-group">
+            ${ytPill}
+            ${tikTokPill}
+          </div>
+          ${item.youtubeUrl ? `
+            <a href="${escapeHtml(item.youtubeUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="padding: 0.18rem 0.5rem; font-size: 0.7rem; text-decoration: none;" title="Watch on YouTube">
+              <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Watch
+            </a>
+          ` : `
+            <button type="button" class="icon-btn-small" onclick="window.copyToClipboard('${escapeJsString(item.title || '')}', 'Video Title')" title="Copy Title">
+              <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
+            </button>
+          `}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) {
+    lucide.createIcons();
+  }
 }
 
 // 3. Recent Published Videos Showcase

@@ -58,6 +58,7 @@ namespace YoutubeGenerator.Services
             var channels = GetChannelsOverview();
             var recentPublished = GetRecentPublishedVideos(6);
             var recentActivity = GetRecentActivity(8);
+            var publicationQueue = GetPublicationQueue();
             var kpis = GetOverviewKpis(channels, bagsInfo);
 
             return new
@@ -69,6 +70,7 @@ namespace YoutubeGenerator.Services
                 userRole = isAuthenticated ? "Admin" : "Guest",
                 kpis = kpis,
                 channels = channels,
+                publicationQueue = publicationQueue,
                 recentPublished = recentPublished,
                 recentActivity = recentActivity,
                 workers = new
@@ -232,6 +234,196 @@ namespace YoutubeGenerator.Services
             return list;
         }
 
+        private class PublicationQueueItem
+        {
+            public string Id { get; set; } = "";
+            public string Type { get; set; } = "short";
+            public string KindKey { get; set; } = "";
+            public string SubKindKey { get; set; } = "";
+            public string Title { get; set; } = "";
+            public string Streamer { get; set; } = "";
+            public double DurationSeconds { get; set; }
+            public string DurationFormatted { get; set; } = "";
+            public DateTime? ScheduledPublishTime { get; set; }
+            public string? ScheduledPublishTimeUtc { get; set; }
+            public DateTime? CreatedAt { get; set; }
+            public string Countdown { get; set; } = "";
+            public bool IsFuture { get; set; }
+            public bool IsUploadedYt { get; set; }
+            public string? YoutubeVideoId { get; set; }
+            public string? YoutubeUrl { get; set; }
+            public bool IsUploadedTikTok { get; set; }
+            public string? TikTokPublishId { get; set; }
+            public string? FilePath { get; set; }
+        }
+
+        private object GetPublicationQueue()
+        {
+            var upcoming = new List<PublicationQueueItem>();
+            var publishedRecent = new List<PublicationQueueItem>();
+
+            var bagShortsFile = Path.Combine(_bagsDir, "bag_shorts.json");
+            if (File.Exists(bagShortsFile))
+            {
+                try
+                {
+                    var shorts = JsonFileService.Load<List<ShortItem>>(bagShortsFile);
+                    if (shorts != null)
+                    {
+                        var pending = shorts
+                            .Where(s => !s.IsUploaded || !s.IsTikTokUploaded)
+                            .OrderBy(s => s.ScheduledPublishTime)
+                            .ToList();
+
+                        foreach (var s in pending)
+                        {
+                            var isFuture = s.ScheduledPublishTime > DateTime.UtcNow;
+                            var diff = s.ScheduledPublishTime - DateTime.UtcNow;
+                            string countdown;
+                            if (s.IsUploaded && !s.IsTikTokUploaded)
+                            {
+                                countdown = "YT Done • TikTok Queue";
+                            }
+                            else if (isFuture)
+                            {
+                                if (diff.TotalHours >= 24)
+                                    countdown = $"in {(int)diff.TotalDays}d {diff.Hours}h";
+                                else if (diff.TotalHours >= 1)
+                                    countdown = $"in {(int)diff.TotalHours}h {diff.Minutes}m";
+                                else if (diff.TotalMinutes >= 1)
+                                    countdown = $"in {(int)diff.TotalMinutes}m";
+                                else
+                                    countdown = "in < 1m";
+                            }
+                            else
+                            {
+                                countdown = "Ready / Next Slot";
+                            }
+
+                            upcoming.Add(new PublicationQueueItem
+                            {
+                                Id = s.ShortId,
+                                Type = "short",
+                                KindKey = s.KindKey,
+                                SubKindKey = s.SubKindKey,
+                                Title = string.IsNullOrWhiteSpace(s.Title) ? $"Short by @{s.Streamer}" : s.Title,
+                                Streamer = s.Streamer,
+                                DurationSeconds = s.DurationSeconds,
+                                DurationFormatted = s.DurationSeconds > 0 ? $"{Math.Round(s.DurationSeconds)}s" : "--",
+                                ScheduledPublishTime = s.ScheduledPublishTime,
+                                ScheduledPublishTimeUtc = s.ScheduledPublishTime.ToString("o"),
+                                CreatedAt = s.CreatedAt,
+                                Countdown = countdown,
+                                IsFuture = isFuture,
+                                IsUploadedYt = s.IsUploaded,
+                                YoutubeVideoId = s.YoutubeVideoId,
+                                YoutubeUrl = !string.IsNullOrWhiteSpace(s.YoutubeVideoId) ? $"https://www.youtube.com/shorts/{s.YoutubeVideoId}" : null,
+                                IsUploadedTikTok = s.IsTikTokUploaded,
+                                TikTokPublishId = s.TikTokPublishId,
+                                FilePath = s.FilePath
+                            });
+                        }
+
+                        var done = shorts
+                            .Where(s => s.IsUploaded)
+                            .OrderByDescending(s => s.ScheduledPublishTime)
+                            .Take(10)
+                            .ToList();
+
+                        foreach (var s in done)
+                        {
+                            publishedRecent.Add(new PublicationQueueItem
+                            {
+                                Id = s.ShortId,
+                                Type = "short",
+                                KindKey = s.KindKey,
+                                SubKindKey = s.SubKindKey,
+                                Title = s.Title,
+                                Streamer = s.Streamer,
+                                DurationSeconds = s.DurationSeconds,
+                                DurationFormatted = s.DurationSeconds > 0 ? $"{Math.Round(s.DurationSeconds)}s" : "--",
+                                ScheduledPublishTime = s.ScheduledPublishTime,
+                                ScheduledPublishTimeUtc = s.ScheduledPublishTime.ToString("o"),
+                                CreatedAt = s.CreatedAt,
+                                Countdown = "Published",
+                                IsFuture = false,
+                                IsUploadedYt = s.IsUploaded,
+                                YoutubeVideoId = s.YoutubeVideoId,
+                                YoutubeUrl = !string.IsNullOrWhiteSpace(s.YoutubeVideoId) ? $"https://www.youtube.com/shorts/{s.YoutubeVideoId}" : null,
+                                IsUploadedTikTok = s.IsTikTokUploaded,
+                                TikTokPublishId = s.TikTokPublishId,
+                                FilePath = s.FilePath
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load publication queue from bag_shorts.json");
+                }
+            }
+
+            var bagYtFile = Path.Combine(_bagsDir, _cfg.Value.BagYoutubePath ?? "bag_youtube.json");
+            if (File.Exists(bagYtFile))
+            {
+                try
+                {
+                    var montages = JsonFileService.Load<List<MontageItem>>(bagYtFile);
+                    if (montages != null)
+                    {
+                        foreach (var m in montages.Where(m => !m.Completed))
+                        {
+                            var durationStr = m.TotalDuration != TimeSpan.Zero
+                                ? m.TotalDuration.ToString(@"hh\:mm\:ss").TrimStart('0', ':')
+                                : "--";
+                            if (string.IsNullOrWhiteSpace(durationStr) || durationStr == "00") durationStr = "0:00";
+
+                            upcoming.Add(new PublicationQueueItem
+                            {
+                                Id = m.MontageId,
+                                Type = "montage",
+                                KindKey = m.KindKey,
+                                SubKindKey = m.SubKindKey,
+                                Title = m.GeneratedTitle ?? $"Montage Package ({m.KindKey})",
+                                Streamer = m.Clips?.FirstOrDefault()?.Description ?? "Multiple Streamers",
+                                DurationSeconds = m.TotalDuration.TotalSeconds,
+                                DurationFormatted = durationStr,
+                                ScheduledPublishTime = null,
+                                ScheduledPublishTimeUtc = null,
+                                CreatedAt = null,
+                                Countdown = "Queued for Upload",
+                                IsFuture = false,
+                                IsUploadedYt = false,
+                                YoutubeVideoId = null,
+                                YoutubeUrl = null,
+                                IsUploadedTikTok = false,
+                                TikTokPublishId = null,
+                                FilePath = m.FinalVideoPath
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load publication queue from bag_youtube.json");
+                }
+            }
+
+            var nextItem = upcoming
+                .Where(x => x.ScheduledPublishTime.HasValue && x.ScheduledPublishTime.Value > DateTime.UtcNow)
+                .OrderBy(x => x.ScheduledPublishTime!.Value)
+                .FirstOrDefault();
+
+            return new
+            {
+                totalCount = upcoming.Count,
+                nextReleaseTime = nextItem?.ScheduledPublishTimeUtc,
+                nextCountdown = nextItem?.Countdown,
+                items = upcoming,
+                recentPublished = publishedRecent
+            };
+        }
+
         private List<object> GetRecentActivity(int limit = 8)
         {
             var list = new List<object>();
@@ -309,7 +501,8 @@ namespace YoutubeGenerator.Services
                 _cfg.Value.BagDownloadPath ?? "bag_download.json",
                 _cfg.Value.BagTrimmedPath ?? "bag_trimmed.json",
                 _cfg.Value.BagMontagePath ?? "bag_montage.json",
-                _cfg.Value.BagYoutubePath ?? "bag_youtube.json"
+                _cfg.Value.BagYoutubePath ?? "bag_youtube.json",
+                "bag_shorts.json"
             };
 
             int failedClipsCount = 0;

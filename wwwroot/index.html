@@ -111,6 +111,43 @@
           </div>
         </div>
 
+        <!-- 2.5 Scheduled Publication Queue & Release Timeline -->
+        <div class="card publication-queue-card" id="publicationQueueCard">
+          <div class="card-header" style="margin-bottom: 0.25rem;">
+            <div class="card-title">
+              <i data-lucide="calendar-clock" style="color: var(--accent-cyan);"></i> Scheduled Publication Queue
+            </div>
+            <div class="header-btns-group">
+              <span class="queue-next-pill" id="queueNextPill">
+                <i data-lucide="clock" style="width: 12px; height: 12px;"></i>
+                <span id="queueNextText">Scanning Schedule...</span>
+              </span>
+              <button class="btn btn-secondary btn-sm" onclick="openBagInExplorer('bag_shorts.json')" title="Inspect Shorts Bag in Explorer">
+                <i data-lucide="folder-kanban" style="width: 13px; height: 13px;"></i> Shorts Bag
+              </button>
+            </div>
+          </div>
+
+          <div class="queue-filter-tabs">
+            <button class="queue-tab-btn active" id="filterQueueAll" onclick="window.filterPublicationQueue('all')">
+              <i data-lucide="layers" style="width: 13px; height: 13px;"></i> All Scheduled (<span id="queueCountAll">0</span>)
+            </button>
+            <button class="queue-tab-btn" id="filterQueueShorts" onclick="window.filterPublicationQueue('short')">
+              <i data-lucide="smartphone" style="width: 13px; height: 13px;"></i> Shorts (<span id="queueCountShorts">0</span>)
+            </button>
+            <button class="queue-tab-btn" id="filterQueueMontages" onclick="window.filterPublicationQueue('montage')">
+              <i data-lucide="film" style="width: 13px; height: 13px;"></i> Montages (<span id="queueCountMontages">0</span>)
+            </button>
+            <button class="queue-tab-btn" id="filterQueuePublished" onclick="window.filterPublicationQueue('published')">
+              <i data-lucide="check-circle" style="width: 13px; height: 13px;"></i> Recently Published (<span id="queueCountPublished">0</span>)
+            </button>
+          </div>
+
+          <div class="queue-items-grid" id="publicationQueueGrid">
+            <!-- Populated dynamically via overview.js -->
+          </div>
+        </div>
+
         <!-- 3. Interactive Visual Pipeline Flow -->
         <div class="card pipeline-card-container" style="margin-bottom: 1.5rem;">
           <div class="card-header">
