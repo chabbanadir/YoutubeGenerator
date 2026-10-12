@@ -48,6 +48,7 @@ builder.Services.AddScoped<IShortsRenderService, ShortsRenderService>();
 builder.Services.AddScoped<IShortsSchedulerService, ShortsSchedulerService>();
 builder.Services.AddScoped<IYoutubeAuthService, YoutubeAuthService>();
 builder.Services.AddScoped<ITikTokAuthService, TikTokAuthService>();
+builder.Services.AddScoped<ITikTokUploader, TikTokUploader>();
 builder.Services.AddScoped<IGitHubCsvFetcher, GitHubCsvFetcher>();
 builder.Services.Configure<CollectWorkerConfig>(
     builder.Configuration.GetSection("CollectWorker")

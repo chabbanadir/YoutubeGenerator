@@ -59,7 +59,7 @@ namespace YoutubeGenerator.Services
             }
 
             var encodedRedirect = Uri.EscapeDataString(redirectUri);
-            var scopes = _config["TikTok:Scopes"] ?? "user.info.basic,user.info.profile";
+            var scopes = _config["TikTok:Scopes"] ?? "user.info.basic,user.info.profile,video.publish,video.upload";
             return $"https://www.tiktok.com/v2/auth/authorize/?client_key={clientKey}&scope={scopes}&response_type=code&redirect_uri={encodedRedirect}&state={kindKey}";
         }
 
@@ -184,6 +184,127 @@ namespace YoutubeGenerator.Services
                 File.WriteAllText(filePath, obj.ToJsonString(options));
                 _logger.LogInformation($"[TikTokAuth] Disconnected TikTok for '{kindKey}'");
             }
+        }
+
+        public bool IsConnected(string kindKey)
+        {
+            var filePath = Path.Combine(_kindsDir, $"{kindKey}.json");
+            if (!File.Exists(filePath)) return false;
+
+            try
+            {
+                var content = File.ReadAllText(filePath);
+                var obj = JsonNode.Parse(content) as JsonObject;
+                var tt = obj?["TikTokConfig"] as JsonObject;
+                return tt != null && (tt["Connected"]?.GetValue<bool>() ?? false);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public async Task<string?> GetValidAccessTokenAsync(string kindKey)
+        {
+            var filePath = Path.Combine(_kindsDir, $"{kindKey}.json");
+            if (!File.Exists(filePath)) return null;
+
+            try
+            {
+                var content = File.ReadAllText(filePath);
+                var obj = JsonNode.Parse(content) as JsonObject;
+                var tt = obj?["TikTokConfig"] as JsonObject;
+                if (tt == null || !(tt["Connected"]?.GetValue<bool>() ?? false)) return null;
+
+                string? accessToken = tt["AccessToken"]?.ToString();
+                string? expiresUtcStr = tt["TokenExpiresUtc"]?.ToString();
+
+                if (DateTime.TryParse(expiresUtcStr, out var expiresUtc))
+                {
+                    // If expires in less than 30 minutes, refresh it now
+                    if (DateTime.UtcNow.AddMinutes(30) >= expiresUtc)
+                    {
+                        _logger.LogInformation($"[TikTokAuth] Access token for '{kindKey}' expiring soon ({expiresUtc:u}). Refreshing...");
+                        return await RefreshTokenAsync(kindKey);
+                    }
+                }
+
+                return accessToken;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"[TikTokAuth] Error reading access token for '{kindKey}'");
+                return null;
+            }
+        }
+
+        public async Task<string?> RefreshTokenAsync(string kindKey)
+        {
+            var filePath = Path.Combine(_kindsDir, $"{kindKey}.json");
+            if (!File.Exists(filePath)) return null;
+
+            var content = File.ReadAllText(filePath);
+            var obj = JsonNode.Parse(content) as JsonObject;
+            var tt = obj?["TikTokConfig"] as JsonObject;
+            if (tt == null) return null;
+
+            string? refreshToken = tt["RefreshToken"]?.ToString();
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                _logger.LogWarning($"[TikTokAuth] No refresh token available for '{kindKey}'");
+                return null;
+            }
+
+            var (clientKey, clientSecret) = GetGlobalCredentials();
+            var client = _httpClientFactory.CreateClient();
+
+            var tokenRequest = new HttpRequestMessage(HttpMethod.Post, "https://open.tiktokapis.com/v2/oauth/token/");
+            tokenRequest.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                { "client_key", clientKey },
+                { "client_secret", clientSecret },
+                { "grant_type", "refresh_token" },
+                { "refresh_token", refreshToken }
+            });
+
+            var tokenResp = await client.SendAsync(tokenRequest);
+            var tokenBody = await tokenResp.Content.ReadAsStringAsync();
+
+            if (!tokenResp.IsSuccessStatusCode)
+            {
+                _logger.LogError($"[TikTokAuth] Token refresh failed for '{kindKey}': {tokenBody}");
+                return null;
+            }
+
+            var json = JsonNode.Parse(tokenBody);
+            var data = json?["data"] ?? json;
+            if (data == null)
+            {
+                _logger.LogError($"[TikTokAuth] Invalid token refresh response: {tokenBody}");
+                return null;
+            }
+
+            string newAccessToken = data["access_token"]?.ToString() ?? "";
+            string newRefreshToken = data["refresh_token"]?.ToString() ?? refreshToken;
+            int expiresIn = data["expires_in"]?.GetValue<int>() ?? 86400;
+            int refreshExpiresIn = data["refresh_expires_in"]?.GetValue<int>() ?? 31536000;
+
+            if (string.IsNullOrEmpty(newAccessToken))
+            {
+                _logger.LogError($"[TikTokAuth] No access token in refresh response: {tokenBody}");
+                return null;
+            }
+
+            tt["AccessToken"] = newAccessToken;
+            tt["RefreshToken"] = newRefreshToken;
+            tt["TokenExpiresUtc"] = DateTime.UtcNow.AddSeconds(expiresIn).ToString("O");
+            tt["RefreshTokenExpiresUtc"] = DateTime.UtcNow.AddSeconds(refreshExpiresIn).ToString("O");
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(filePath, obj.ToJsonString(options));
+            _logger.LogInformation($"[TikTokAuth] Successfully refreshed TikTok access token for '{kindKey}'");
+
+            return newAccessToken;
         }
     }
 }

@@ -13,15 +13,18 @@ namespace YoutubeGenerator.Controllers
     public class TikTokAuthController : ControllerBase
     {
         private readonly ITikTokAuthService _authService;
+        private readonly ITikTokUploader _uploader;
         private readonly ILogger<TikTokAuthController> _logger;
         private readonly IConfiguration _config;
 
         public TikTokAuthController(
             ITikTokAuthService authService,
+            ITikTokUploader uploader,
             ILogger<TikTokAuthController> logger,
             IConfiguration config)
         {
             _authService = authService;
+            _uploader = uploader;
             _logger = logger;
             _config = config;
         }
@@ -132,6 +135,105 @@ namespace YoutubeGenerator.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Failed to disconnect TikTok for {kind}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpPost("refresh/{kind}")]
+        public async Task<IActionResult> RefreshToken(string kind)
+        {
+            if (string.IsNullOrWhiteSpace(kind))
+            {
+                return BadRequest(new { error = "Kind parameter is required." });
+            }
+
+            try
+            {
+                var newToken = await _authService.RefreshTokenAsync(kind.Trim().ToLowerInvariant());
+                if (string.IsNullOrEmpty(newToken))
+                {
+                    return BadRequest(new { success = false, message = "Token refresh failed. Account might not be connected." });
+                }
+
+                return Ok(new { success = true, message = "Token refreshed successfully." });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to refresh TikTok token for {kind}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpPost("test-upload/{kind}")]
+        public async Task<IActionResult> TestUpload(string kind, [FromBody] System.Text.Json.Nodes.JsonObject? payload)
+        {
+            if (string.IsNullOrWhiteSpace(kind))
+            {
+                return BadRequest(new { error = "Kind parameter is required." });
+            }
+
+            string kindKey = kind.Trim().ToLowerInvariant();
+            if (!_authService.IsConnected(kindKey))
+            {
+                return BadRequest(new { error = $"TikTok is not connected for '{kindKey}'." });
+            }
+
+            string? videoPath = payload?["videoPath"]?.ToString();
+            string title = payload?["title"]?.ToString() ?? "Test Video #gaming #shorts";
+            string privacyLevel = payload?["privacyLevel"]?.ToString() ?? "SELF_ONLY";
+
+            // If no video path provided, find a short video from workspace
+            if (string.IsNullOrWhiteSpace(videoPath) || !System.IO.File.Exists(videoPath))
+            {
+                var candidatePaths = new[]
+                {
+                    "/home/chabba/Projects/Projects/YoutubeGenerator/workspace/ressources/intro_gaming.mp4",
+                    "/home/chabba/Projects/Projects/YoutubeGenerator/workspace/ressources/intro_valo.mp4",
+                    "/home/chabba/Projects/Projects/YoutubeGenerator/workspace/ressources/intro_valorant.mp4"
+                };
+
+                videoPath = candidatePaths.FirstOrDefault(System.IO.File.Exists);
+            }
+
+            if (string.IsNullOrWhiteSpace(videoPath) || !System.IO.File.Exists(videoPath))
+            {
+                return BadRequest(new { error = "No valid test video file found on server to upload." });
+            }
+
+            try
+            {
+                var (success, publishId, message) = await _uploader.UploadVideoAsync(kindKey, videoPath, title, privacyLevel);
+                return Ok(new
+                {
+                    success,
+                    publishId,
+                    message,
+                    videoUsed = System.IO.Path.GetFileName(videoPath)
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to execute test upload for {kindKey}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpGet("publish-status/{kind}")]
+        public async Task<IActionResult> GetPublishStatus(string kind, [FromQuery] string publishId)
+        {
+            if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(publishId))
+            {
+                return BadRequest(new { error = "Parameters 'kind' and 'publishId' are required." });
+            }
+
+            try
+            {
+                var (status, failReason) = await _uploader.CheckPublishStatusAsync(kind.Trim().ToLowerInvariant(), publishId);
+                return Ok(new { status, failReason });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to check publish status for {publishId}");
                 return StatusCode(500, new { error = ex.Message });
             }
         }
