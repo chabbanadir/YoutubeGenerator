@@ -139,7 +139,7 @@ namespace YoutubeGenerator.Services
 
                 if (latestPending != null && latestPending.ScheduledPublishTime > DateTime.UtcNow)
                 {
-                    nextSlot = latestPending.ScheduledPublishTime.AddHours(3);
+                    nextSlot = latestPending.ScheduledPublishTime.AddHours(1);
                 }
                 else
                 {
@@ -165,8 +165,8 @@ namespace YoutubeGenerator.Services
                 JsonFileService.Save(_bagShorts, bag);
 
                 _renderTracker?.CompleteShortProgress($"Short '{title}' queued for {nextSlot:HH:mm:ss} UTC");
-                _renderTracker?.AddLog("shorts", $"📅 Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (+3h cadence)");
-                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +3h cadence for {kind})");
+                _renderTracker?.AddLog("shorts", $"📅 Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (+1h cadence)");
+                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +1h cadence for {kind})");
                 return item;
             }
         }
@@ -197,7 +197,7 @@ namespace YoutubeGenerator.Services
                     DateTime newSlot;
                     if (latestPendingForKind != null && latestPendingForKind.ScheduledPublishTime > DateTime.UtcNow)
                     {
-                        newSlot = latestPendingForKind.ScheduledPublishTime.AddHours(3);
+                        newSlot = latestPendingForKind.ScheduledPublishTime.AddHours(1);
                     }
                     else
                     {
