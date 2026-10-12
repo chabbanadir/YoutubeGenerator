@@ -185,20 +185,43 @@ namespace YoutubeGenerator.crons
                             }
                         }
 
-                        // Clean up file if YouTube has already completed its upload
+                        // STRICT CLEANUP RULE:
+                        // Only delete the short video file and thumbnail if published on BOTH YouTube AND TikTok.
+                        // If either platform has not yet uploaded, retain the file safely on disk.
                         try
                         {
-                            if (candidate.IsUploaded && File.Exists(candidate.FilePath))
+                            bool bothUploaded = false;
+                            lock (_fileLock)
                             {
-                                File.Delete(candidate.FilePath);
-                                _logger.LogInformation($"[CronTikTok] Both YouTube & TikTok uploaded. Cleaned up video file: {candidate.FilePath}");
+                                var bagCheck = JsonFileService.Load<List<ShortItem>>(_bagShorts);
+                                var matchCheck = bagCheck?.FirstOrDefault(s => s.ShortId == candidate.ShortId);
+                                if (matchCheck != null)
+                                {
+                                    bothUploaded = matchCheck.IsUploaded && matchCheck.IsTikTokUploaded;
+                                }
+                            }
+
+                            if (bothUploaded)
+                            {
+                                if (File.Exists(candidate.FilePath))
+                                {
+                                    File.Delete(candidate.FilePath);
+                                    _logger.LogInformation($"[CronTikTok] Both YouTube & TikTok uploaded. Cleaned up video file: {candidate.FilePath}");
+                                }
                                 if (!string.IsNullOrEmpty(candidate.ThumbnailPath) && File.Exists(candidate.ThumbnailPath))
                                 {
                                     File.Delete(candidate.ThumbnailPath);
                                 }
                             }
+                            else
+                            {
+                                _logger.LogInformation($"[CronTikTok] TikTok uploaded successfully. Retaining video '{Path.GetFileName(candidate.FilePath)}' on disk until YouTube upload is also completed.");
+                            }
                         }
-                        catch { }
+                        catch (Exception exDel)
+                        {
+                            _logger.LogWarning(exDel, $"[CronTikTok] Error checking/deleting short file: {candidate.FilePath}");
+                        }
 
                         // Wait a brief safety delay (30 seconds) between multiple uploads
                         await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);

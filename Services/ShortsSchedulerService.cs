@@ -269,17 +269,28 @@ namespace YoutubeGenerator.Services
                         }
                     }
 
-                    // Clean up local short file and thumbnail to conserve disk space
-                    // Only delete if both YouTube and TikTok (if channel connected) have uploaded
+                    // STRICT CLEANUP RULE:
+                    // Only delete the short video file and thumbnail if published on BOTH YouTube AND TikTok.
+                    // If either platform has not yet uploaded, retain the file safely on disk.
                     try
                     {
-                        bool isTikTokPending = _tikTokAuthService.IsConnected(nextShort.KindKey) && !nextShort.IsTikTokUploaded;
-                        if (!isTikTokPending)
+                        bool bothUploaded = false;
+                        lock (_fileLock)
+                        {
+                            var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
+                            var match = bag?.FirstOrDefault(s => s.ShortId == nextShort.ShortId);
+                            if (match != null)
+                            {
+                                bothUploaded = match.IsUploaded && match.IsTikTokUploaded;
+                            }
+                        }
+
+                        if (bothUploaded)
                         {
                             if (File.Exists(nextShort.FilePath))
                             {
                                 File.Delete(nextShort.FilePath);
-                                _logger.LogInformation($"[ShortsScheduler] Cleaned up rendered short video: {nextShort.FilePath}");
+                                _logger.LogInformation($"[ShortsScheduler] Both YouTube & TikTok uploaded. Cleaned up rendered short video: {nextShort.FilePath}");
                             }
                             if (!string.IsNullOrEmpty(nextShort.ThumbnailPath) && File.Exists(nextShort.ThumbnailPath))
                             {
@@ -288,10 +299,13 @@ namespace YoutubeGenerator.Services
                         }
                         else
                         {
-                            _logger.LogInformation($"[ShortsScheduler] Retaining video file {Path.GetFileName(nextShort.FilePath)} for pending TikTok upload.");
+                            _logger.LogInformation($"[ShortsScheduler] YouTube uploaded successfully. Retaining video '{Path.GetFileName(nextShort.FilePath)}' on disk until TikTok upload is also completed.");
                         }
                     }
-                    catch { }
+                    catch (Exception exDel)
+                    {
+                        _logger.LogWarning(exDel, $"[ShortsScheduler] Error checking/deleting short file: {nextShort.FilePath}");
+                    }
 
                     return true;
                 }
