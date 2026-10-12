@@ -102,6 +102,12 @@ namespace YoutubeGenerator.Services
             _logger.LogInformation($"📦 Programmed {totalPasses} total encoding passes for {clips.Count} clips.");
             _renderTracker?.AddLog($"[Pipeline] Programmed {totalPasses} total encoding passes for {clips.Count} source clips (batch chunk size: 4)", "step");
 
+            // Clean up stale leftover chunks from older runs (> 6 hours old) once before starting
+            string outputDir = Path.GetDirectoryName(finalOutputPath)!;
+            if (!Directory.Exists(outputDir))
+                Directory.CreateDirectory(outputDir);
+            CleanupStaleChunks(outputDir);
+
             return await MergeVideosInternalAsync(clips, finalOutputPath, transitionType, transitionDuration, context, isFinalTarget: true, ct);
         }
 
@@ -132,8 +138,6 @@ namespace YoutubeGenerator.Services
             string outputDir = Path.GetDirectoryName(outputPath)!;
             if (!Directory.Exists(outputDir))
                 Directory.CreateDirectory(outputDir);
-
-            CleanupStaleChunks(outputDir);
 
             var chunkFiles = new List<string>();
             try
@@ -182,7 +186,7 @@ namespace YoutubeGenerator.Services
             {
                 if (!Directory.Exists(directory)) return;
                 var staleChunks = Directory.GetFiles(directory, "chunk_*.mp4");
-                var threshold = DateTime.UtcNow.AddMinutes(-30);
+                var threshold = DateTime.UtcNow.AddHours(-6);
                 foreach (var file in staleChunks)
                 {
                     try
@@ -190,7 +194,7 @@ namespace YoutubeGenerator.Services
                         if (File.GetLastWriteTimeUtc(file) < threshold)
                         {
                             File.Delete(file);
-                            _logger.LogInformation($"🧹 Cleaned up stale chunk file: {file}");
+                            _logger.LogInformation($"🧹 Cleaned up stale leftover chunk file: {file}");
                         }
                     }
                     catch { }
