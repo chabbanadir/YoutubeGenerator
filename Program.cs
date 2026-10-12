@@ -64,6 +64,7 @@ builder.Services.AddHostedService<CronCollectService>();
 builder.Services.AddHostedService<CronMontageUploadService>();
 builder.Services.AddHostedService<CronShortsUploadService>();
 builder.Services.AddHostedService<CronTokenRefreshService>();
+builder.Services.AddHostedService<CronTikTokUploadService>();
 
 // Authentication & Authorization
 builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme)

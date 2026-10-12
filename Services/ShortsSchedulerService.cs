@@ -17,6 +17,7 @@ namespace YoutubeGenerator.Services
         private readonly IYoutubeUploader _uploader;
         private readonly ILlmService _llmService;
         private readonly IThumbnailService _thumbnailService;
+        private readonly ITikTokAuthService _tikTokAuthService;
         private readonly IRenderTrackerService? _renderTracker;
         private readonly string _bagShorts;
         private readonly string _backoffFile;
@@ -30,6 +31,7 @@ namespace YoutubeGenerator.Services
             IYoutubeUploader uploader,
             ILlmService llmService,
             IThumbnailService thumbnailService,
+            ITikTokAuthService tikTokAuthService,
             IRenderTrackerService? renderTracker = null)
         {
             _logger = logger;
@@ -37,6 +39,7 @@ namespace YoutubeGenerator.Services
             _uploader = uploader;
             _llmService = llmService;
             _thumbnailService = thumbnailService;
+            _tikTokAuthService = tikTokAuthService;
             _renderTracker = renderTracker;
 
             string bagsDir = Path.Combine(env.ContentRootPath, "workspace", "bags");
@@ -267,16 +270,25 @@ namespace YoutubeGenerator.Services
                     }
 
                     // Clean up local short file and thumbnail to conserve disk space
+                    // Only delete if both YouTube and TikTok (if channel connected) have uploaded
                     try
                     {
-                        if (File.Exists(nextShort.FilePath))
+                        bool isTikTokPending = _tikTokAuthService.IsConnected(nextShort.KindKey) && !nextShort.IsTikTokUploaded;
+                        if (!isTikTokPending)
                         {
-                            File.Delete(nextShort.FilePath);
-                            _logger.LogInformation($"[ShortsScheduler] Cleaned up rendered short video: {nextShort.FilePath}");
+                            if (File.Exists(nextShort.FilePath))
+                            {
+                                File.Delete(nextShort.FilePath);
+                                _logger.LogInformation($"[ShortsScheduler] Cleaned up rendered short video: {nextShort.FilePath}");
+                            }
+                            if (!string.IsNullOrEmpty(nextShort.ThumbnailPath) && File.Exists(nextShort.ThumbnailPath))
+                            {
+                                File.Delete(nextShort.ThumbnailPath);
+                            }
                         }
-                        if (!string.IsNullOrEmpty(nextShort.ThumbnailPath) && File.Exists(nextShort.ThumbnailPath))
+                        else
                         {
-                            File.Delete(nextShort.ThumbnailPath);
+                            _logger.LogInformation($"[ShortsScheduler] Retaining video file {Path.GetFileName(nextShort.FilePath)} for pending TikTok upload.");
                         }
                     }
                     catch { }
