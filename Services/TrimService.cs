@@ -105,6 +105,7 @@ namespace YoutubeGenerator.Services
              string firstClipPath,
              string workingDir)
         {
+            string normalizedIntroPath = Path.Combine(workingDir, $"intro_normalized_{Guid.NewGuid():N}.mp4");
             string concatListPath = Path.Combine(workingDir, $"concat_intro_{Guid.NewGuid():N}.txt");
             string tempOutputPath = Path.Combine(workingDir, $"intro_temp_{Guid.NewGuid():N}.mp4");
 
@@ -125,19 +126,54 @@ namespace YoutubeGenerator.Services
 
             try
             {
-                // 1. Create concat list
+                // 1. Normalize intro to match trimmed clip specs (fps, resolution, pixel format, audio)
+                //    TrimAsync produces: fps=30, 1920x1080, yuv420p, loudnorm audio, aac 192k 48kHz stereo
+                //    Without this step, concat fails or produces glitchy output (green frames, desync)
+                _renderTracker?.AddLog($"[Intro] Normalizing intro video to match clip specs (30fps, 1920x1080, yuv420p)...", "step");
+
+                string normalizeArgs =
+                    $"-y -i \"{introPath}\" " +
+                    "-vf \"fps=30," +
+                        "scale=1920:1080:force_original_aspect_ratio=decrease," +
+                        "pad=1920:1080:(ow-iw)/2:(oh-ih)/2," +
+                        "format=yuv420p\" " +
+                    "-af \"loudnorm=I=-14:TP=-1.5:LRA=11\" " +
+                    "-c:v libx264 -preset superfast -crf 18 -pix_fmt yuv420p " +
+                    "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
+                    $"\"{normalizedIntroPath}\"";
+
+                var (normExitCode, normStdout, normStderr) = await ProcessRunner.RunStreamingAsync(
+                    "ffmpeg",
+                    normalizeArgs,
+                    workingDir,
+                    onLine: line =>
+                    {
+                        if (line.Contains("Error", StringComparison.OrdinalIgnoreCase) || line.Contains("Failed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _renderTracker?.AddLog($"[Intro Normalize] ⚠️ {line.Trim()}", "warning");
+                        }
+                    });
+
+                if (normExitCode != 0)
+                {
+                    _renderTracker?.AddLog($"[Intro] ❌ FFmpeg intro normalization failed: {normStderr}", "error");
+                    throw new Exception($"FFmpeg intro normalization failed: {normStderr}");
+                }
+
+                _renderTracker?.AddLog($"[Intro] ✅ Intro normalized successfully", "info");
+
+                // 2. Create concat list with normalized intro + first clip
                 await File.WriteAllTextAsync(concatListPath,
-                    $"file '{introPath.Replace("\\", "/")}'\n" +
+                    $"file '{normalizedIntroPath.Replace("\\", "/")}'\n" +
                     $"file '{firstClipPath.Replace("\\", "/")}'\n");
 
-                // 2. Concat with video re-encode
+                // 3. Concat demux (stream copy) — both files now have identical specs
                 string args =
                     $"-y -f concat -safe 0 -i \"{concatListPath}\" " +
-                    "-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p " +
-                    "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
+                    "-c copy " +
                     $"\"{tempOutputPath}\"";
 
-                _renderTracker?.AddLog($"[Intro] Concatenating intro with lead clip via FFmpeg...", "step");
+                _renderTracker?.AddLog($"[Intro] Concatenating normalized intro with lead clip via FFmpeg...", "step");
                 var (exitCode, stdout, stderr) = await ProcessRunner.RunStreamingAsync(
                     "ffmpeg", 
                     args, 
@@ -167,6 +203,8 @@ namespace YoutubeGenerator.Services
             }
             finally
             {
+                if (File.Exists(normalizedIntroPath))
+                    try { File.Delete(normalizedIntroPath); } catch { }
                 if (File.Exists(concatListPath))
                     try { File.Delete(concatListPath); } catch { }
                 if (File.Exists(tempOutputPath))

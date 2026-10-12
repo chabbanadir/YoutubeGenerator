@@ -137,6 +137,37 @@ namespace YoutubeGenerator.Services
                     !s.IsUploaded &&
                     File.Exists(s.FilePath) &&
                     (!_channelBackoff.TryGetValue(s.KindKey, out var backoffUntil) || DateTime.UtcNow >= backoffUntil));
+
+                // If the selected short has a stale ScheduledPublishTime (in the past),
+                // reschedule it to a valid future time. YouTube rejects PublishAt in the past.
+                // This handles shorts that were rate-limited yesterday and need to be retried today.
+                if (nextShort != null && nextShort.ScheduledPublishTime < DateTime.UtcNow)
+                {
+                    var latestPendingForKind = bag
+                        .Where(s => !s.IsUploaded && s.KindKey == nextShort.KindKey && s.ShortId != nextShort.ShortId)
+                        .OrderByDescending(s => s.ScheduledPublishTime)
+                        .FirstOrDefault();
+
+                    DateTime newSlot;
+                    if (latestPendingForKind != null && latestPendingForKind.ScheduledPublishTime > DateTime.UtcNow)
+                    {
+                        newSlot = latestPendingForKind.ScheduledPublishTime.AddHours(3);
+                    }
+                    else
+                    {
+                        newSlot = DateTime.UtcNow.AddMinutes(5);
+                    }
+
+                    nextShort.ScheduledPublishTime = newSlot;
+
+                    // Persist the rescheduled time so it survives restarts
+                    var match = bag.FirstOrDefault(s => s.ShortId == nextShort.ShortId);
+                    if (match != null)
+                    {
+                        match.ScheduledPublishTime = newSlot;
+                        JsonFileService.Save(_bagShorts, bag);
+                    }
+                }
             }
 
             if (nextShort == null)
