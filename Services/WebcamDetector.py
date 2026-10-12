@@ -46,6 +46,7 @@ STREAMER_PRESETS = {
     "yamato": {"has_facecam": True, "x": 1450, "y": 680, "w": 440, "h": 265},
     "hylissang": {"has_facecam": True, "x": 1210, "y": 790, "w": 420, "h": 280},
     "hylissanglol": {"has_facecam": True, "x": 1210, "y": 790, "w": 420, "h": 280},
+    "hien": {"has_facecam": True, "x": 30, "y": 724, "w": 430, "h": 265},
 }
 
 CASCADE_CANDIDATE_PATHS = [

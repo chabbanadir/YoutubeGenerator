@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
@@ -352,7 +353,11 @@ namespace YoutubeGenerator.Services
 
                 if (!string.IsNullOrWhiteSpace(output))
                 {
-                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var options = new JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true,
+                        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+                    };
                     return JsonSerializer.Deserialize<WebcamCoordinates>(output.Trim(), options);
                 }
             }
@@ -523,10 +528,19 @@ namespace YoutubeGenerator.Services
 
         public class WebcamCoordinates
         {
+            [JsonPropertyName("has_facecam")]
             public bool HasFacecam { get; set; }
+
+            [JsonPropertyName("x")]
             public int X { get; set; }
+
+            [JsonPropertyName("y")]
             public int Y { get; set; }
+
+            [JsonPropertyName("w")]
             public int W { get; set; }
+
+            [JsonPropertyName("h")]
             public int H { get; set; }
         }
     }
