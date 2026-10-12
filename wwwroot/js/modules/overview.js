@@ -269,8 +269,13 @@ window.filterPublicationQueue = filterPublicationQueue;
 
 export function renderPublicationQueue(data) {
   currentQueueData = data || { totalCount: 0, items: [], recentPublished: [] };
-  const upcoming = currentQueueData.items || [];
-  const published = currentQueueData.recentPublished || [];
+  const allRawItems = currentQueueData.items || [];
+  const upcoming = allRawItems.filter(x => !x.isUploadedYt).sort((a, b) => {
+    const ta = a.scheduledPublishTimeUtc ? new Date(a.scheduledPublishTimeUtc).getTime() : 0;
+    const tb = b.scheduledPublishTimeUtc ? new Date(b.scheduledPublishTimeUtc).getTime() : 0;
+    return ta - tb;
+  });
+  const published = [...allRawItems.filter(x => x.isUploadedYt), ...(currentQueueData.recentPublished || [])];
 
   const countAll = upcoming.length;
   const countShorts = upcoming.filter(x => x.type === 'short').length;
@@ -288,10 +293,11 @@ export function renderPublicationQueue(data) {
 
   const nextPillText = document.getElementById('queueNextText');
   if (nextPillText) {
-    if (currentQueueData.nextReleaseTime) {
-      const nextDate = new Date(currentQueueData.nextReleaseTime);
+    const firstUpcoming = upcoming[0];
+    if (firstUpcoming && firstUpcoming.scheduledPublishTimeUtc) {
+      const nextDate = new Date(firstUpcoming.scheduledPublishTimeUtc);
       const timeStr = nextDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      nextPillText.textContent = `Next Up: ${timeStr} (${currentQueueData.nextCountdown || 'Upcoming'})`;
+      nextPillText.textContent = `Next Up: ${timeStr} (${firstUpcoming.countdown || 'Upcoming'})`;
     } else if (countAll > 0) {
       nextPillText.textContent = `${countAll} ready in queue`;
     } else {
@@ -317,15 +323,26 @@ function renderPublicationQueueItems() {
     return;
   }
 
+  const allRawItems = currentQueueData.items || [];
+  const upcoming = allRawItems.filter(x => !x.isUploadedYt).sort((a, b) => {
+    const ta = a.scheduledPublishTimeUtc ? new Date(a.scheduledPublishTimeUtc).getTime() : 0;
+    const tb = b.scheduledPublishTimeUtc ? new Date(b.scheduledPublishTimeUtc).getTime() : 0;
+    return ta - tb;
+  });
+
   let allItems = [];
   if (currentQueueFilter === 'all') {
-    allItems = currentQueueData.items || [];
+    allItems = upcoming;
   } else if (currentQueueFilter === 'short') {
-    allItems = (currentQueueData.items || []).filter(x => x.type === 'short');
+    allItems = upcoming.filter(x => x.type === 'short');
   } else if (currentQueueFilter === 'montage') {
-    allItems = (currentQueueData.items || []).filter(x => x.type === 'montage');
+    allItems = upcoming.filter(x => x.type === 'montage');
   } else if (currentQueueFilter === 'published') {
-    allItems = currentQueueData.recentPublished || [];
+    const map = new Map();
+    [...allRawItems.filter(x => x.isUploadedYt), ...(currentQueueData.recentPublished || [])].forEach(x => {
+      if (x.id) map.set(x.id, x);
+    });
+    allItems = Array.from(map.values());
   }
 
   const expandBtn = document.getElementById('btnToggleQueueExpand');
