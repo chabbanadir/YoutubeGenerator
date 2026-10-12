@@ -88,24 +88,62 @@ namespace YoutubeGenerator.Services
             var initResp = await client.SendAsync(initReq);
             var initBody = await initResp.Content.ReadAsStringAsync();
 
-            if (!initResp.IsSuccessStatusCode)
+            string publishId = "";
+            string uploadUrl = "";
+            bool isInboxDraft = false;
+
+            if (initResp.IsSuccessStatusCode)
+            {
+                var initJson = JsonNode.Parse(initBody);
+                var errNode = initJson?["error"];
+                if (errNode == null || errNode["code"]?.ToString() == "ok" || errNode["code"]?.ToString() == "0")
+                {
+                    publishId = initJson?["data"]?["publish_id"]?.ToString() ?? "";
+                    uploadUrl = initJson?["data"]?["upload_url"]?.ToString() ?? "";
+                }
+            }
+
+            // Fallback: If direct post is blocked due to un-audited/sandbox status, use Inbox Draft upload
+            if (string.IsNullOrEmpty(uploadUrl) && initBody.Contains("unaudited_client_can_only_post_to_private_accounts"))
+            {
+                _logger.LogInformation($"[TikTokUpload] Direct Post blocked (unaudited app). Falling back to TikTok Inbox/Draft upload...");
+                isInboxDraft = true;
+
+                var inboxPayload = new JsonObject
+                {
+                    ["source_info"] = new JsonObject
+                    {
+                        ["source"] = "FILE_UPLOAD",
+                        ["video_size"] = videoSize,
+                        ["chunk_size"] = videoSize,
+                        ["total_chunk_count"] = 1
+                    }
+                };
+
+                var inboxReq = new HttpRequestMessage(HttpMethod.Post, "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/");
+                inboxReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                inboxReq.Content = new StringContent(inboxPayload.ToJsonString(), Encoding.UTF8, "application/json");
+
+                var inboxResp = await client.SendAsync(inboxReq);
+                var inboxBody = await inboxResp.Content.ReadAsStringAsync();
+
+                if (inboxResp.IsSuccessStatusCode)
+                {
+                    var inboxJson = JsonNode.Parse(inboxBody);
+                    publishId = inboxJson?["data"]?["publish_id"]?.ToString() ?? "";
+                    uploadUrl = inboxJson?["data"]?["upload_url"]?.ToString() ?? "";
+                }
+                else
+                {
+                    _logger.LogError($"[TikTokUpload] Inbox init failed ({inboxResp.StatusCode}): {inboxBody}");
+                    return (false, "", $"TikTok Inbox init failed: {inboxBody}");
+                }
+            }
+            else if (string.IsNullOrEmpty(uploadUrl))
             {
                 _logger.LogError($"[TikTokUpload] Init failed ({initResp.StatusCode}): {initBody}");
                 return (false, "", $"TikTok init failed: {initBody}");
             }
-
-            var initJson = JsonNode.Parse(initBody);
-            var errNode = initJson?["error"];
-            if (errNode != null && errNode["code"]?.ToString() != "ok" && errNode["code"]?.ToString() != "0")
-            {
-                string errMsg = errNode["message"]?.ToString() ?? initBody;
-                _logger.LogError($"[TikTokUpload] TikTok API Error in Init: {errMsg}");
-                return (false, "", $"TikTok API error: {errMsg}");
-            }
-
-            var data = initJson?["data"];
-            string publishId = data?["publish_id"]?.ToString() ?? "";
-            string uploadUrl = data?["upload_url"]?.ToString() ?? "";
 
             if (string.IsNullOrEmpty(uploadUrl))
             {
@@ -147,9 +185,11 @@ namespace YoutubeGenerator.Services
 
             // 3. Check Initial Publish Status
             var (status, failReason) = await CheckPublishStatusAsync(kindKey, publishId);
-            _logger.LogInformation($"[TikTokUpload] Post status for '{publishId}': {status} {failReason}");
+            string modeMsg = isInboxDraft 
+                ? $"Video sent to TikTok Inbox/Drafts (status: {status}, ready in mobile app)" 
+                : $"Video published directly (status: {status})";
 
-            return (true, publishId, $"Video uploaded successfully (status: {status})");
+            return (true, publishId, modeMsg);
         }
 
         public async Task<(string Status, string FailReason)> CheckPublishStatusAsync(string kindKey, string publishId)
