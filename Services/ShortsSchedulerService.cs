@@ -19,6 +19,7 @@ namespace YoutubeGenerator.Services
         private readonly IThumbnailService _thumbnailService;
         private readonly IRenderTrackerService? _renderTracker;
         private readonly string _bagShorts;
+        private readonly string _backoffFile;
         private static readonly object _fileLock = new();
         private static readonly ConcurrentDictionary<string, DateTime> _channelBackoff = new();
 
@@ -41,6 +42,51 @@ namespace YoutubeGenerator.Services
             string bagsDir = Path.Combine(env.ContentRootPath, "workspace", "bags");
             Directory.CreateDirectory(bagsDir);
             _bagShorts = Path.Combine(bagsDir, "bag_shorts.json");
+            _backoffFile = Path.Combine(bagsDir, "channel_backoff.json");
+        }
+
+        private bool IsChannelBackedOff(string channelKey, out DateTime backoffUntil)
+        {
+            backoffUntil = DateTime.MinValue;
+            if (string.IsNullOrEmpty(channelKey)) return false;
+
+            if (_channelBackoff.TryGetValue(channelKey, out backoffUntil) && DateTime.UtcNow < backoffUntil)
+                return true;
+
+            try
+            {
+                if (File.Exists(_backoffFile))
+                {
+                    var fileBackoff = JsonFileService.Load<Dictionary<string, DateTime>>(_backoffFile);
+                    if (fileBackoff != null && fileBackoff.TryGetValue(channelKey, out var fileUntil) && DateTime.UtcNow < fileUntil)
+                    {
+                        backoffUntil = fileUntil;
+                        _channelBackoff[channelKey] = fileUntil;
+                        return true;
+                    }
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        private void SetChannelBackoff(string channelKey, DateTime until)
+        {
+            if (string.IsNullOrEmpty(channelKey)) return;
+            _channelBackoff[channelKey] = until;
+            try
+            {
+                lock (_fileLock)
+                {
+                    var fileBackoff = File.Exists(_backoffFile)
+                        ? JsonFileService.Load<Dictionary<string, DateTime>>(_backoffFile) ?? new()
+                        : new Dictionary<string, DateTime>();
+                    fileBackoff[channelKey] = until;
+                    JsonFileService.Save(_backoffFile, fileBackoff);
+                }
+            }
+            catch { }
         }
 
         public async Task<ShortItem?> QueueShortAsync(string shortFilePath, ClipInfo clip, double durationSeconds)
@@ -136,7 +182,7 @@ namespace YoutubeGenerator.Services
                 nextShort = bag.FirstOrDefault(s =>
                     !s.IsUploaded &&
                     File.Exists(s.FilePath) &&
-                    (!_channelBackoff.TryGetValue(s.KindKey, out var backoffUntil) || DateTime.UtcNow >= backoffUntil));
+                    !IsChannelBackedOff(s.KindKey, out _));
 
                 // If the selected short has a stale ScheduledPublishTime (in the past),
                 // reschedule it to a valid future time. YouTube rejects PublishAt in the past.
@@ -248,8 +294,10 @@ namespace YoutubeGenerator.Services
 
                 if (isRateLimit)
                 {
-                    var backoffUntil = DateTime.UtcNow.AddHours(4);
-                    _channelBackoff[nextShort.KindKey] = backoffUntil;
+                    // YouTube daily upload limit (uploadLimitExceeded) operates on a 24-hour rolling window.
+                    // Back off for 6 hours so it does not prematurely retry inside the same window.
+                    var backoffUntil = DateTime.UtcNow.AddHours(6);
+                    SetChannelBackoff(nextShort.KindKey, backoffUntil);
                     _renderTracker?.AddLog("shorts", $"⏳ YouTube daily upload limit reached for channel '{nextShort.KindKey}'. Channel backed off until {backoffUntil:HH:mm} UTC (other channels continue).");
                     _logger.LogWarning($"[ShortsScheduler] Daily upload limit reached for '{nextShort.KindKey}'. Channel backed off until {backoffUntil:yyyy-MM-dd HH:mm:ss} UTC.");
                 }
