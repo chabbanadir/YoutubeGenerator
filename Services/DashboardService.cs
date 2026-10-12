@@ -270,8 +270,9 @@ namespace YoutubeGenerator.Services
                     var shorts = JsonFileService.Load<List<ShortItem>>(bagShortsFile);
                     if (shorts != null)
                     {
+                        // Upcoming queue: strictly videos that are pending YouTube upload!
                         var pending = shorts
-                            .Where(s => !s.IsUploaded || !s.IsTikTokUploaded)
+                            .Where(s => !s.IsUploaded)
                             .OrderBy(s => s.ScheduledPublishTime)
                             .ToList();
 
@@ -280,11 +281,7 @@ namespace YoutubeGenerator.Services
                             var isFuture = s.ScheduledPublishTime > DateTime.UtcNow;
                             var diff = s.ScheduledPublishTime - DateTime.UtcNow;
                             string countdown;
-                            if (s.IsUploaded && !s.IsTikTokUploaded)
-                            {
-                                countdown = "YT Done • TikTok Queue";
-                            }
-                            else if (isFuture)
+                            if (isFuture)
                             {
                                 if (diff.TotalHours >= 24)
                                     countdown = $"in {(int)diff.TotalDays}d {diff.Hours}h";
@@ -297,7 +294,7 @@ namespace YoutubeGenerator.Services
                             }
                             else
                             {
-                                countdown = "Ready / Next Slot";
+                                countdown = "Ready";
                             }
 
                             upcoming.Add(new PublicationQueueItem

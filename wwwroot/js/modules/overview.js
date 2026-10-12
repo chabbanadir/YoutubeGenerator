@@ -246,6 +246,13 @@ export function renderYoutubeAccountsHub(channels = []) {
 // 2.5 Scheduled Publication Queue & Release Radar
 let currentQueueData = null;
 let currentQueueFilter = 'all';
+let isQueueExpanded = false;
+
+export function toggleQueueExpand() {
+  isQueueExpanded = !isQueueExpanded;
+  renderPublicationQueueItems();
+}
+window.toggleQueueExpand = toggleQueueExpand;
 
 export function filterPublicationQueue(filter) {
   currentQueueFilter = filter;
@@ -284,9 +291,9 @@ export function renderPublicationQueue(data) {
     if (currentQueueData.nextReleaseTime) {
       const nextDate = new Date(currentQueueData.nextReleaseTime);
       const timeStr = nextDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      nextPillText.textContent = `Next Release: ${timeStr} (${currentQueueData.nextCountdown || 'Upcoming'})`;
+      nextPillText.textContent = `Next Up: ${timeStr} (${currentQueueData.nextCountdown || 'Upcoming'})`;
     } else if (countAll > 0) {
-      nextPillText.textContent = `${countAll} video(s) ready in queue`;
+      nextPillText.textContent = `${countAll} ready in queue`;
     } else {
       nextPillText.textContent = 'Queue is idle';
     }
@@ -296,7 +303,7 @@ export function renderPublicationQueue(data) {
 }
 
 function renderPublicationQueueItems() {
-  const container = document.getElementById('publicationQueueGrid');
+  const container = document.getElementById('publicationQueueContainer');
   if (!container) return;
 
   if (!currentQueueData) {
@@ -310,18 +317,33 @@ function renderPublicationQueueItems() {
     return;
   }
 
-  let items = [];
+  let allItems = [];
   if (currentQueueFilter === 'all') {
-    items = currentQueueData.items || [];
+    allItems = currentQueueData.items || [];
   } else if (currentQueueFilter === 'short') {
-    items = (currentQueueData.items || []).filter(x => x.type === 'short');
+    allItems = (currentQueueData.items || []).filter(x => x.type === 'short');
   } else if (currentQueueFilter === 'montage') {
-    items = (currentQueueData.items || []).filter(x => x.type === 'montage');
+    allItems = (currentQueueData.items || []).filter(x => x.type === 'montage');
   } else if (currentQueueFilter === 'published') {
-    items = currentQueueData.recentPublished || [];
+    allItems = currentQueueData.recentPublished || [];
   }
 
-  if (items.length === 0) {
+  const expandBtn = document.getElementById('btnToggleQueueExpand');
+  const expandBtnText = document.getElementById('queueExpandBtnText');
+  if (expandBtn && expandBtnText) {
+    if (allItems.length > 6) {
+      expandBtn.style.display = 'inline-flex';
+      expandBtnText.textContent = isQueueExpanded ? 'Show Next 6' : `Show All (${allItems.length})`;
+      const icon = expandBtn.querySelector('i');
+      if (icon) {
+        icon.setAttribute('data-lucide', isQueueExpanded ? 'chevrons-up' : 'chevrons-down');
+      }
+    } else {
+      expandBtn.style.display = 'none';
+    }
+  }
+
+  if (allItems.length === 0) {
     container.innerHTML = `
       <div class="queue-empty-box">
         <i data-lucide="inbox" style="width: 28px; height: 28px; color: var(--accent-cyan); opacity: 0.6;"></i>
@@ -333,17 +355,22 @@ function renderPublicationQueueItems() {
     return;
   }
 
-  container.innerHTML = items.map(item => {
+  const items = isQueueExpanded ? allItems : allItems.slice(0, 6);
+
+  const rowsHtml = items.map((item, index) => {
     const isShort = item.type === 'short';
     const kindKey = (item.kindKey || 'lol').toLowerCase();
     const badgeTheme = kindKey === 'lol' ? 'lol' : (kindKey === 'valorant' ? 'valorant' : 'default');
     const streamer = item.streamer ? escapeHtml(item.streamer) : 'Streamer';
     const title = escapeHtml(item.title || 'Untitled Video');
+    const safeTitle = escapeJsString(item.title || '');
     const duration = item.durationFormatted || '--';
+    const slotNum = String(index + 1).padStart(2, '0');
+    const isNext = index === 0 && currentQueueFilter !== 'published';
 
     // Format Scheduled Time
-    let scheduleBadgeHtml = '';
-    let isImminent = false;
+    let timePrimaryHtml = '--:--';
+    let countdownBadgeHtml = '';
     if (item.scheduledPublishTimeUtc) {
       const pubDate = new Date(item.scheduledPublishTimeUtc);
       const isToday = new Date().toDateString() === pubDate.toDateString();
@@ -356,23 +383,24 @@ function renderPublicationQueueItems() {
       let badgeClass = 'future';
       if (diffHours > 0 && diffHours <= 1) {
         badgeClass = 'imminent';
-        isImminent = true;
       } else if (isToday && diffHours > 0) {
         badgeClass = 'today';
-      } else if (diffHours <= 0 && !item.isUploadedYt) {
+      } else if (diffHours <= 0) {
         badgeClass = 'ready';
       }
 
-      scheduleBadgeHtml = `
-        <span class="queue-schedule-badge ${badgeClass}" title="Scheduled for ${pubDate.toLocaleString()}">
-          <i data-lucide="calendar" style="width: 11px; height: 11px;"></i>
-          ${dateStr} ${timeStr} • ${escapeHtml(item.countdown)}
+      timePrimaryHtml = `${timeStr} <span class="queue-date-tag">${dateStr}</span>`;
+      countdownBadgeHtml = `
+        <span class="queue-countdown-pill ${badgeClass}">
+          <i data-lucide="${badgeClass === 'imminent' ? 'zap' : 'clock'}" style="width: 10px; height: 10px;"></i>
+          ${escapeHtml(item.countdown)}
         </span>
       `;
     } else {
-      scheduleBadgeHtml = `
-        <span class="queue-schedule-badge ready">
-          <i data-lucide="play-circle" style="width: 11px; height: 11px;"></i>
+      timePrimaryHtml = `Scheduled`;
+      countdownBadgeHtml = `
+        <span class="queue-countdown-pill ready">
+          <i data-lucide="play-circle" style="width: 10px; height: 10px;"></i>
           ${escapeHtml(item.countdown || 'Queued')}
         </span>
       `;
@@ -380,65 +408,99 @@ function renderPublicationQueueItems() {
 
     // Platform status pills
     const ytPill = item.isUploadedYt
-      ? `<span class="queue-platform-pill uploaded"><i data-lucide="check-circle" style="width: 11px; height: 11px;"></i> YouTube Live</span>`
-      : `<span class="queue-platform-pill pending"><i data-lucide="clock" style="width: 11px; height: 11px;"></i> YouTube Scheduled</span>`;
+      ? `<span class="queue-platform-pill uploaded"><i data-lucide="check-circle" style="width: 10px; height: 10px;"></i> YouTube Live</span>`
+      : `<span class="queue-platform-pill pending"><i data-lucide="clock" style="width: 10px; height: 10px;"></i> YT Scheduled</span>`;
 
     const tikTokPill = item.isUploadedTikTok
       ? `<span class="queue-platform-pill uploaded">${getTiktokIcon(10, 'margin-right: 2px;')} TikTok Live</span>`
       : isShort
-        ? `<span class="queue-platform-pill pending">${getTiktokIcon(10, 'margin-right: 2px;')} TikTok Pending</span>`
+        ? `<span class="queue-platform-pill pending">${getTiktokIcon(10, 'margin-right: 2px;')} TikTok Queue</span>`
         : `<span class="queue-platform-pill off">${getTiktokIcon(10, 'margin-right: 2px;')} N/A</span>`;
 
     return `
-      <div class="queue-item-card ${isImminent ? 'is-imminent' : ''}">
-        <div class="queue-item-header">
-          <div class="queue-item-badges">
+      <tr class="${isNext ? 'is-next-slot' : ''}">
+        <td style="text-align: center;">
+          <span class="queue-slot-badge ${isNext ? 'next' : ''}">
+            #${slotNum}
+          </span>
+        </td>
+        <td>
+          <div class="queue-time-cell">
+            <div class="queue-time-primary">${timePrimaryHtml}</div>
+            ${countdownBadgeHtml}
+          </div>
+        </td>
+        <td>
+          <div class="queue-badges-cell">
             <span class="queue-format-badge ${isShort ? 'short' : 'montage'}">
-              ${isShort ? 'Short 9:16' : 'Montage 16:9'}
+              ${isShort ? 'Short' : 'Montage'}
             </span>
-            <span class="profile-kind-badge ${badgeTheme}" style="font-size: 0.65rem; padding: 0.1rem 0.4rem;">
+            <span class="profile-kind-badge ${badgeTheme}" style="font-size: 0.62rem; padding: 0.1rem 0.35rem;">
               ${escapeHtml(kindKey.toUpperCase())}
             </span>
-            ${item.subKindKey ? `
-              <span class="tag-chip" style="font-size: 0.65rem; padding: 0.1rem 0.4rem; background: rgba(255,255,255,0.06);">
-                ${escapeHtml(item.subKindKey.toUpperCase())}
-              </span>
-            ` : ''}
           </div>
-          ${scheduleBadgeHtml}
-        </div>
-
-        <div class="queue-item-title" title="${title}">
-          ${title}
-        </div>
-
-        <div class="queue-item-meta-row">
-          <span class="queue-streamer-chip">
-            <i data-lucide="user" style="width: 11px; height: 11px;"></i> @${streamer}
-          </span>
-          <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.25rem;">
-            <i data-lucide="clock" style="width: 11px; height: 11px;"></i> ${escapeHtml(duration)}
-          </span>
-        </div>
-
-        <div class="queue-item-platforms">
-          <div class="queue-platforms-group">
+        </td>
+        <td>
+          <div class="queue-title-cell">
+            <div class="queue-title-text" title="${title}">${title}</div>
+            <div class="queue-title-sub">
+              <span class="queue-streamer-sub"><i data-lucide="user" style="width: 10px; height: 10px;"></i> @${streamer}</span>
+              <span class="queue-duration-sub"><i data-lucide="clock" style="width: 10px; height: 10px;"></i> ${escapeHtml(duration)}</span>
+              ${item.subKindKey ? `<span class="tag-chip" style="font-size: 0.6rem; padding: 0.05rem 0.3rem;">${escapeHtml(item.subKindKey.toUpperCase())}</span>` : ''}
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="queue-platforms-cell">
             ${ytPill}
             ${tikTokPill}
           </div>
-          ${item.youtubeUrl ? `
-            <a href="${escapeHtml(item.youtubeUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="padding: 0.18rem 0.5rem; font-size: 0.7rem; text-decoration: none;" title="Watch on YouTube">
-              <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Watch
-            </a>
-          ` : `
-            <button type="button" class="icon-btn-small" onclick="window.copyToClipboard('${escapeJsString(item.title || '')}', 'Video Title')" title="Copy Title">
-              <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
-            </button>
-          `}
-        </div>
-      </div>
+        </td>
+        <td style="text-align: right;">
+          <div class="queue-actions-cell">
+            ${item.youtubeUrl ? `
+              <a href="${escapeHtml(item.youtubeUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.45rem; font-size: 0.68rem; text-decoration: none;" title="Watch Video">
+                <i data-lucide="external-link" style="width: 11px; height: 11px;"></i>
+              </a>
+            ` : `
+              <button type="button" class="icon-btn-small" onclick="window.copyToClipboard('${safeTitle}', 'Video Title')" title="Copy Title">
+                <i data-lucide="copy" style="width: 11px; height: 11px;"></i>
+              </button>
+            `}
+          </div>
+        </td>
+      </tr>
     `;
   }).join('');
+
+  container.innerHTML = `
+    <div class="queue-table-wrapper">
+      <table class="queue-table">
+        <thead>
+          <tr>
+            <th style="width: 50px; text-align: center;">SLOT</th>
+            <th style="width: 165px;">RELEASE TIME</th>
+            <th style="width: 130px;">FORMAT / GAME</th>
+            <th>VIDEO TITLE & STREAMER</th>
+            <th style="width: 185px;">PLATFORMS</th>
+            <th style="width: 65px; text-align: right;">ACTION</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+    </div>
+    <div class="queue-table-footer">
+      <span>Showing <strong>${items.length}</strong> of <strong>${allItems.length}</strong> queued items</span>
+      ${allItems.length > 6 ? `
+        <button class="btn btn-secondary btn-sm" onclick="window.toggleQueueExpand()" style="font-size: 0.72rem; padding: 0.2rem 0.55rem;">
+          <i data-lucide="${isQueueExpanded ? 'chevrons-up' : 'chevrons-down'}" style="width: 11px; height: 11px;"></i>
+          ${isQueueExpanded ? 'Show Next 6 Only' : `Show All ${allItems.length} Items`}
+        </button>
+      ` : ''}
+    </div>
+  `;
 
   if (window.lucide) {
     lucide.createIcons();
