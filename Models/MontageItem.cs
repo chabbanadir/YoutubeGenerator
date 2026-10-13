@@ -23,6 +23,7 @@ namespace YoutubeGenerator.Models
 
         public string? FinalVideoPath { get; set; }
         public string? GeneratedThumbnailPath { get; set; }
+        public DateTime? UploadedAt { get; set; }
 
 
         public string ToPromptString()

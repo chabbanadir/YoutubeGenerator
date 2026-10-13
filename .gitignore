@@ -374,3 +374,8 @@ workspace/bags/
 cookies.txt
 *.pdf
 twitch-extension-fixed/
+
+workspace/downloads/
+workspace/ressources/*.mp4
+scratch/
+*.zip

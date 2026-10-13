@@ -13,6 +13,8 @@ namespace YoutubeGenerator.workers
         private readonly IMontageProfileService _montageProfileService;
         private readonly IYoutubeUploader _uploader;
         private readonly IThumbnailService _thumbnailService;
+        private readonly IYoutubeQuotaService _quotaService;
+        private readonly string _contentRoot;
 
         private readonly string _bagYoutube;
         private readonly string _bagYoutubeDone;
@@ -25,18 +27,44 @@ namespace YoutubeGenerator.workers
             IMontageProfileService montageProfileService,
             ILogger<YoutubeWorker> logger,
             IYoutubeUploader uploader,
-            IThumbnailService thumbnailService)
+            IThumbnailService thumbnailService,
+            IYoutubeQuotaService quotaService)
         {
             _llamaService = llamaService;
             _logger = logger;
             _montageProfileService = montageProfileService;
             _uploader = uploader;
             _thumbnailService = thumbnailService;
+            _quotaService = quotaService;
+            _contentRoot = env.ContentRootPath;
 
             var root = Path.Combine(env.ContentRootPath, "workspace", "bags");
             _bagYoutube = Path.Combine(root, cfg.Value.BagYoutubePath);
             _bagYoutubeDone = Path.Combine(root, cfg.Value.BagYoutubeDonePath);
             _bagYoutubeFailed = Path.Combine(root, cfg.Value.BagYoutubeFailedPath);
+        }
+
+        private string? ResolveVideoPath(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+            if (File.Exists(path)) return path;
+
+            // Handle /app/workspace/... -> local workspace path
+            if (path.StartsWith("/app/workspace", StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = path.Substring("/app/workspace".Length).TrimStart('/', '\\');
+                var local = Path.Combine(_contentRoot, "workspace", rel);
+                if (File.Exists(local)) return local;
+            }
+            // Handle local workspace path -> /app/workspace/...
+            var wsPrefix = Path.Combine(_contentRoot, "workspace");
+            if (path.StartsWith(wsPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = path.Substring(wsPrefix.Length).TrimStart('/', '\\');
+                var inApp = Path.Combine("/app", "workspace", rel);
+                if (File.Exists(inApp)) return inApp;
+            }
+            return path;
         }
 
         public async Task RunAsync()
@@ -49,7 +77,15 @@ namespace YoutubeGenerator.workers
             if (bag.Count == 0 && bagFailed.Count > 0)
             {
                 var recoverable = bagFailed
-                    .Where(x => !string.IsNullOrEmpty(x.FinalVideoPath) && File.Exists(x.FinalVideoPath))
+                    .Where(x => {
+                        var resolved = ResolveVideoPath(x.FinalVideoPath);
+                        if (!string.IsNullOrEmpty(resolved) && File.Exists(resolved))
+                        {
+                            x.FinalVideoPath = resolved;
+                            return true;
+                        }
+                        return false;
+                    })
                     .ToList();
 
                 if (recoverable.Count > 0)
@@ -89,89 +125,102 @@ namespace YoutubeGenerator.workers
                         metaItem.GeneratedTags = gen.Tags ?? new List<string>();
 
                         JsonFileService.Save(_bagYoutube, bag);
+                        // YouTube Quota Gatekeeper for Long Videos
+                        if (!_quotaService.CanUploadLongVideo(metaItem.KindKey, out string quotaReason))
+                        {
+                            _logger.LogInformation($"[YoutubeWorker] Postponing long video {metaItem.MontageId} on {metaItem.KindKey}: {quotaReason}");
+                            return;
+                        }
+
+                        metaItem.FinalVideoPath = ResolveVideoPath(metaItem.FinalVideoPath);
+
                         try
                         {
                             var creds = _montageProfileService.GetYoutubeCredentials(metaItem.KindKey);
 
-                            // prevent concurrency
-                            if (creds.UploadConfig.Enabled)
+                        // prevent concurrency
+                        if (creds.UploadConfig.Enabled)
+                        {
+                            _logger.LogWarning($"⚠ Upload for {metaItem.KindKey} already running. Skipping.");
+                            return;
+                        }
+
+                        // set upload lock
+                        creds.UploadConfig.Enabled = true;
+                        _montageProfileService.SaveYoutubeCredentials(metaItem.KindKey, creds);
+
+                        // format description before upload
+                        metaItem.GeneratedDescription = TextFormatter.FixDescription(metaItem.GeneratedDescription);
+                        JsonFileService.Save(_bagYoutube, bag);
+
+                        // compute schedule time
+                        DateTime publishTime = creds.UploadConfig.LastUploadTime.AddHours(creds.UploadConfig.MinDelayHours);
+                        if (publishTime <= DateTime.UtcNow)
+                        {
+                            publishTime = DateTime.UtcNow.AddMinutes(15);
+                        }
+
+                        _logger.LogInformation(
+                            $"📤 Uploading montage {metaItem.MontageId}  start — publish at {publishTime}");
+
+                        // 2️⃣ THUMBNAIL GENERATION (High-CTR 3-Point Visual Engine)
+                        string? thumbPath = null;
+                        try
+                        {
+                            thumbPath = await _thumbnailService.GenerateThumbnailAsync(metaItem);
+                            if (!string.IsNullOrEmpty(thumbPath))
                             {
-                                _logger.LogWarning($"⚠ Upload for {metaItem.KindKey} already running. Skipping.");
-                                return;
+                                metaItem.GeneratedThumbnailPath = thumbPath;
+                                JsonFileService.Save(_bagYoutube, bag);
                             }
+                        }
+                        catch (Exception exThumb)
+                        {
+                            _logger.LogWarning(exThumb, $"⚠️ Failed to generate custom thumbnail for {metaItem.MontageId}, continuing with video upload.");
+                        }
 
-                            // set upload lock
-                            creds.UploadConfig.Enabled = true;
-                            _montageProfileService.SaveYoutubeCredentials(metaItem.KindKey, creds);
+                        string videoId = await _uploader.UploadAsync(
+                            metaItem.FinalVideoPath,
+                            metaItem.GeneratedTitle,
+                            metaItem.GeneratedDescription,
+                            creds,
+                            publishTime,
+                            metaItem.GeneratedTags
+                        );
 
-                            // format description before upload
-                            metaItem.GeneratedDescription = TextFormatter.FixDescription(metaItem.GeneratedDescription);
-                            JsonFileService.Save(_bagYoutube, bag);
-
-                            // compute schedule time
-                            DateTime publishTime = creds.UploadConfig.LastUploadTime.AddHours(creds.UploadConfig.MinDelayHours);
-                            if (publishTime <= DateTime.UtcNow)
-                            {
-                                publishTime = DateTime.UtcNow.AddMinutes(15);
-                            }
-
-                            _logger.LogInformation(
-                                $"📤 Uploading montage {metaItem.MontageId}  start — publish at {publishTime}");
-
-                            // 2️⃣ THUMBNAIL GENERATION (High-CTR 3-Point Visual Engine)
-                            string? thumbPath = null;
+                        // 3️⃣ THUMBNAIL UPLOAD
+                        if (!string.IsNullOrEmpty(thumbPath) && File.Exists(thumbPath))
+                        {
                             try
                             {
-                                thumbPath = await _thumbnailService.GenerateThumbnailAsync(metaItem);
-                                if (!string.IsNullOrEmpty(thumbPath))
-                                {
-                                    metaItem.GeneratedThumbnailPath = thumbPath;
-                                    JsonFileService.Save(_bagYoutube, bag);
-                                }
+                                await _uploader.SetThumbnailAsync(videoId, thumbPath, creds);
                             }
-                            catch (Exception exThumb)
+                            catch (Exception exThumbUp)
                             {
-                                _logger.LogWarning(exThumb, $"⚠️ Failed to generate custom thumbnail for {metaItem.MontageId}, continuing with video upload.");
+                                _logger.LogWarning(exThumbUp, $"⚠️ Failed to upload custom thumbnail for {videoId}");
                             }
+                        }
 
-                            string videoId = await _uploader.UploadAsync(
-                                metaItem.FinalVideoPath,
-                                metaItem.GeneratedTitle,
-                                metaItem.GeneratedDescription,
-                                creds,
-                                publishTime,
-                                metaItem.GeneratedTags
-                            );
+                        // update stats
+                        creds.UploadConfig.LastUploadTime = publishTime;
+                        creds.UploadConfig.UploadCounter++;
+                        creds.UploadConfig.Enabled = false;
+                        _montageProfileService.SaveYoutubeCredentials(metaItem.KindKey, creds);
+                        metaItem.Completed = true;
+                        metaItem.UploadedAt = DateTime.UtcNow;
 
-                            // 3️⃣ THUMBNAIL UPLOAD
-                            if (!string.IsNullOrEmpty(thumbPath) && File.Exists(thumbPath))
-                            {
-                                try
-                                {
-                                    await _uploader.SetThumbnailAsync(videoId, thumbPath, creds);
-                                }
-                                catch (Exception exThumbUp)
-                                {
-                                    _logger.LogWarning(exThumbUp, $"⚠️ Failed to upload custom thumbnail for {videoId}");
-                                }
-                            }
+                        // Record upload in persistent quota tracker
+                        await _quotaService.RecordUploadAsync(metaItem.KindKey, "long", videoId);
 
-                            // update stats
-                            creds.UploadConfig.LastUploadTime = publishTime;
-                            creds.UploadConfig.UploadCounter++;
-                            creds.UploadConfig.Enabled = false;
-                            _montageProfileService.SaveYoutubeCredentials(metaItem.KindKey, creds);
-                            metaItem.Completed = true;
+                        // move to DONE
+                        metaItem.MontageId = videoId;
+                        bagDone.Add(metaItem);
+                        bag.Remove(metaItem);
 
-                            // move to DONE
-                            metaItem.MontageId = videoId;
-                            bagDone.Add(metaItem);
-                            bag.Remove(metaItem);
+                        JsonFileService.Save(_bagYoutube, bag);
+                        JsonFileService.Save(_bagYoutubeDone, bagDone);
 
-                            JsonFileService.Save(_bagYoutube, bag);
-                            JsonFileService.Save(_bagYoutubeDone, bagDone);
-
-                            _logger.LogInformation($"✅ Upload complete: {videoId}");
+                        _logger.LogInformation($"✅ Upload complete: {videoId}");
 
                             // Delete uploaded montage file from disk
                             if (!string.IsNullOrEmpty(metaItem.FinalVideoPath) && File.Exists(metaItem.FinalVideoPath))

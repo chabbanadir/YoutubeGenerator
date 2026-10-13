@@ -48,14 +48,19 @@ namespace YoutubeGenerator.Services
                         shortLayout = "ambient";
                 }
 
+                string rawSubKind = (rec.SubKindKey ?? "").Trim();
+                string subKindKey = (!string.IsNullOrWhiteSpace(rawSubKind))
+                    ? rawSubKind
+                    : (isShort ? "" : "default");
+
                 var clip = new ClipInfo
                 {
                     Link = rec.Link?.Trim(),
                     Description = rec.Description?.Trim(),
                     Start = rec.Start,
                     End = rec.End,
-                    KindKey = rec.KindKey ?? "default",
-                    SubKindKey = rec.SubKindKey ?? "default",
+                    KindKey = string.IsNullOrWhiteSpace(rec.KindKey) ? "default" : rec.KindKey.Trim(),
+                    SubKindKey = subKindKey,
                     IsShort = isShort,
                     ShortLayout = shortLayout
                 };

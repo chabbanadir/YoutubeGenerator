@@ -213,11 +213,18 @@ namespace YoutubeGenerator.Workers
                     var clip = downloadBag[i];
                     _logger.LogInformation($"🚀 Processing clip {clip.Link}");
 
-                    // Checker: Ensure subkind profile exists, auto-create default if missing
-                    _profiles.EnsureProfileExists(clip.KindKey, clip.SubKindKey);
+                    // Routing Rule: Only include in long video montage if SubKindKey is specified!
+                    bool includeInMontage = !string.IsNullOrWhiteSpace(clip.SubKindKey);
+                    var effectiveSubKind = includeInMontage ? clip.SubKindKey : "shorts";
 
-                    var dirRaw = _pathService.GetRawDir(clip.KindKey, clip.SubKindKey, _rootPath);
-                    var dirTrim = _pathService.GetTrimDir(clip.KindKey, clip.SubKindKey, _rootPath);
+                    if (includeInMontage)
+                    {
+                        // Checker: Ensure subkind profile exists, auto-create default if missing
+                        _profiles.EnsureProfileExists(clip.KindKey, clip.SubKindKey);
+                    }
+
+                    var dirRaw = _pathService.GetRawDir(clip.KindKey, effectiveSubKind, _rootPath);
+                    var dirTrim = _pathService.GetTrimDir(clip.KindKey, effectiveSubKind, _rootPath);
 
                     // ----------- STEP 1: DOWNLOAD -----------
 
@@ -251,7 +258,14 @@ namespace YoutubeGenerator.Workers
                         trimResult.Duration =
                             await _transition.GetVideoDurationAsync(trimResult.File);
 
-                        trimBag.Add(trimResult);
+                        if (includeInMontage)
+                        {
+                            trimBag.Add(trimResult);
+                        }
+                        else
+                        {
+                            _logger.LogInformation($"📱 [Routing] Clip {clip.Link} is Short-Only (no subkind). Excluded from montage compilation.");
+                        }
 
                         // ----------- STEP 2.5: OPTIONAL VERTICAL SHORT (Selective Clip) -----------
                         if (clip.IsShort)
@@ -259,7 +273,7 @@ namespace YoutubeGenerator.Workers
                             try
                             {
                                 _renderTracker?.StartShortProgress(clip.Description ?? "Streamer", clip.KindKey, clip.SubKindKey, "Encoding 9:16 Video");
-                                var dirShorts = _pathService.GetShortsDir(clip.KindKey, clip.SubKindKey, _rootPath);
+                                var dirShorts = _pathService.GetShortsDir(clip.KindKey, effectiveSubKind, _rootPath);
                                 var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description, clip.SubKindKey, clip.ShortLayout);
                                 if (!string.IsNullOrEmpty(shortPath))
                                 {
@@ -271,6 +285,12 @@ namespace YoutubeGenerator.Workers
                                 _logger.LogWarning(exShort, $"[Shorts] Failed to generate vertical short for {clip.Link}");
                                 _renderTracker?.AddLog($"⚠️ [Shorts] Failed to generate short for @{clip.Description}: {exShort.Message}", "warning");
                             }
+                        }
+
+                        // If Short-Only, clean up the temporary horizontal trim file
+                        if (!includeInMontage && File.Exists(trimResult.File))
+                        {
+                            try { File.Delete(trimResult.File); } catch { }
                         }
 
                         downloadBag.RemoveAt(i);

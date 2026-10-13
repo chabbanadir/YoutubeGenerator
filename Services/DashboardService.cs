@@ -11,6 +11,7 @@ namespace YoutubeGenerator.Services
         private readonly IWebHostEnvironment _env;
         private readonly ILogger<DashboardService> _logger;
         private readonly IOptions<CollectWorkerConfig> _cfg;
+        private readonly IYoutubeQuotaService _quotaService;
         private readonly string _bagsDir;
         private readonly string _kindsDir;
 
@@ -33,11 +34,13 @@ namespace YoutubeGenerator.Services
         public DashboardService(
             IWebHostEnvironment env,
             ILogger<DashboardService> logger,
-            IOptions<CollectWorkerConfig> cfg)
+            IOptions<CollectWorkerConfig> cfg,
+            IYoutubeQuotaService quotaService)
         {
             _env = env;
             _logger = logger;
             _cfg = cfg;
+            _quotaService = quotaService;
 
             var rootPath = Path.Combine(_env.ContentRootPath, "workspace");
             _bagsDir = Path.Combine(rootPath, "bags");
@@ -60,6 +63,7 @@ namespace YoutubeGenerator.Services
             var recentActivity = GetRecentActivity(8);
             var publicationQueue = GetPublicationQueue();
             var kpis = GetOverviewKpis(channels, bagsInfo);
+            var youtubeQuota = _quotaService.GetAllChannelsQuotaStatus();
 
             return new
             {
@@ -69,6 +73,7 @@ namespace YoutubeGenerator.Services
                 currentUser = isAuthenticated ? "Admin" : null,
                 userRole = isAuthenticated ? "Admin" : "Guest",
                 kpis = kpis,
+                youtubeQuota = youtubeQuota,
                 channels = channels,
                 publicationQueue = publicationQueue,
                 recentPublished = recentPublished,
@@ -92,6 +97,186 @@ namespace YoutubeGenerator.Services
                     }
                 },
                 bags = bagsInfo
+            };
+        }
+
+        public object GetPublicStats()
+        {
+            // 1. Channels Handled
+            var channelsList = new List<object>();
+            int channelsHandled = 0;
+            if (Directory.Exists(_kindsDir))
+            {
+                foreach (var file in Directory.GetFiles(_kindsDir, "*.json").OrderBy(f => f))
+                {
+                    try
+                    {
+                        var content = File.ReadAllText(file);
+                        if (string.IsNullOrWhiteSpace(content)) continue;
+
+                        using var doc = JsonDocument.Parse(content);
+                        var root = doc.RootElement;
+                        var kindName = Path.GetFileNameWithoutExtension(file);
+
+                        string title = "";
+                        if (root.TryGetProperty("YoutubeChannelTitle", out var tProp))
+                            title = tProp.GetString() ?? "";
+
+                        string channelId = "";
+                        if (root.TryGetProperty("YoutubeChannelId", out var cProp))
+                            channelId = cProp.GetString() ?? "";
+
+                        bool hasTikTok = false;
+                        if (root.TryGetProperty("TikTokConfig", out var ttProp) && ttProp.ValueKind == JsonValueKind.Object)
+                        {
+                            if (ttProp.TryGetProperty("Connected", out var ttConn))
+                                hasTikTok = ttConn.GetBoolean();
+                        }
+
+                        channelsHandled++;
+                        channelsList.Add(new
+                        {
+                            key = kindName.ToLowerInvariant(),
+                            name = string.IsNullOrWhiteSpace(title) ? kindName.ToUpperInvariant() : title,
+                            channelId = channelId,
+                            youtubeUrl = !string.IsNullOrWhiteSpace(channelId) ? $"https://www.youtube.com/channel/{channelId}" : null,
+                            hasTikTok = hasTikTok
+                        });
+                    }
+                    catch { }
+                }
+            }
+
+            // 2. Clips Downloaded & Trimmed
+            int clipsDownloaded = 0;
+            int clipsTrimmed = 0;
+            var workerCollectFile = Path.Combine(_bagsDir, _cfg.Value.WorkerFile ?? "worker_collect.json");
+            if (File.Exists(workerCollectFile))
+            {
+                try
+                {
+                    var w1 = JsonFileService.Load<Worker1Model>(workerCollectFile);
+                    if (w1 != null)
+                    {
+                        clipsDownloaded = w1.DownloadCounter;
+                        clipsTrimmed = w1.TrimCounter;
+                    }
+                }
+                catch { }
+            }
+
+            // 3. Montages Created & Published
+            int montagesCreated = 0;
+            var workerMontageFile = Path.Combine(_bagsDir, _cfg.Value.MontageFile ?? "worker_montage.json");
+            if (File.Exists(workerMontageFile))
+            {
+                try
+                {
+                    var w2 = JsonFileService.Load<Worker2State>(workerMontageFile);
+                    if (w2 != null)
+                    {
+                        montagesCreated = w2.FinalCounter;
+                    }
+                }
+                catch { }
+            }
+
+            int montagesPublished = 0;
+            double totalDurationSeconds = 0;
+            var doneFile = Path.Combine(_bagsDir, _cfg.Value.BagYoutubeDonePath ?? "bag_youtube_done.json");
+            if (File.Exists(doneFile))
+            {
+                try
+                {
+                    var doneItems = JsonFileService.Load<List<MontageItem>>(doneFile);
+                    if (doneItems != null)
+                    {
+                        montagesPublished = doneItems.Count;
+                        if (montagesPublished > montagesCreated)
+                        {
+                            montagesCreated = montagesPublished;
+                        }
+                        foreach (var m in doneItems)
+                        {
+                            totalDurationSeconds += m.TotalDuration.TotalSeconds;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // 4. Shorts Published
+            int shortsTotal = 0;
+            int shortsPublished = 0;
+            int shortsPublishedYt = 0;
+            int shortsPublishedTikTok = 0;
+            var shortsFile = Path.Combine(_bagsDir, "bag_shorts.json");
+            if (File.Exists(shortsFile))
+            {
+                try
+                {
+                    var shorts = JsonFileService.Load<List<ShortItem>>(shortsFile);
+                    if (shorts != null)
+                    {
+                        shortsTotal = shorts.Count;
+                        foreach (var s in shorts)
+                        {
+                            bool isYt = s.IsUploaded;
+                            bool isTt = s.IsTikTokUploaded;
+                            if (isYt) shortsPublishedYt++;
+                            if (isTt) shortsPublishedTikTok++;
+                            if (isYt || isTt) shortsPublished++;
+                            if (isYt && s.DurationSeconds > 0)
+                            {
+                                totalDurationSeconds += s.DurationSeconds;
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            int totalVideosPublished = montagesPublished + shortsPublished;
+            var totalTimeSpan = TimeSpan.FromSeconds(totalDurationSeconds);
+            string formattedDuration = $"{(int)totalTimeSpan.TotalHours}h {totalTimeSpan.Minutes}m";
+
+            return new
+            {
+                status = "success",
+                timestamp = DateTime.UtcNow,
+                stats = new
+                {
+                    channelsHandled = channelsHandled,
+                    clipsDownloaded = clipsDownloaded,
+                    clipsProcessed = clipsTrimmed,
+                    montagesCreated = montagesCreated,
+                    montagesPublished = montagesPublished,
+                    shortsPublished = shortsPublished,
+                    shortsTotal = shortsTotal,
+                    totalVideosPublished = totalVideosPublished,
+                    totalDurationSeconds = (int)totalDurationSeconds,
+                    totalDurationFormatted = formattedDuration
+                },
+                breakdown = new
+                {
+                    youtube = new
+                    {
+                        montages = montagesPublished,
+                        shorts = shortsPublishedYt,
+                        total = montagesPublished + shortsPublishedYt
+                    },
+                    tiktok = new
+                    {
+                        shorts = shortsPublishedTikTok
+                    }
+                },
+                channels = channelsList,
+                automation = new
+                {
+                    status = "Operational",
+                    mode = "Autonomous Scheduled Workers",
+                    supportedPlatforms = new[] { "YouTube", "TikTok" }
+                }
             };
         }
 
@@ -248,6 +433,8 @@ namespace YoutubeGenerator.Services
             public string? ScheduledPublishTimeUtc { get; set; }
             public DateTime? CreatedAt { get; set; }
             public string Countdown { get; set; } = "";
+            public string Status { get; set; } = "ready";
+            public string? QuotaReason { get; set; }
             public bool IsFuture { get; set; }
             public bool IsUploadedYt { get; set; }
             public string? YoutubeVideoId { get; set; }
@@ -281,8 +468,18 @@ namespace YoutubeGenerator.Services
                             var isFuture = s.ScheduledPublishTime > DateTime.UtcNow;
                             var diff = s.ScheduledPublishTime - DateTime.UtcNow;
                             string countdown;
-                            if (isFuture)
+                            string status;
+                            string? quotaReasonText = null;
+
+                            if (!_quotaService.CanUploadShort(s.KindKey, out var quotaReason))
                             {
+                                countdown = "Held (Pacing / Quota)";
+                                status = "held";
+                                quotaReasonText = quotaReason;
+                            }
+                            else if (isFuture)
+                            {
+                                status = "scheduled";
                                 if (diff.TotalHours >= 24)
                                     countdown = $"in {(int)diff.TotalDays}d {diff.Hours}h";
                                 else if (diff.TotalHours >= 1)
@@ -294,6 +491,7 @@ namespace YoutubeGenerator.Services
                             }
                             else
                             {
+                                status = "ready";
                                 countdown = "Ready";
                             }
 
@@ -311,6 +509,8 @@ namespace YoutubeGenerator.Services
                                 ScheduledPublishTimeUtc = s.ScheduledPublishTime.ToString("o"),
                                 CreatedAt = s.CreatedAt,
                                 Countdown = countdown,
+                                Status = status,
+                                QuotaReason = quotaReasonText,
                                 IsFuture = isFuture,
                                 IsUploadedYt = s.IsUploaded,
                                 YoutubeVideoId = s.YoutubeVideoId,
@@ -343,6 +543,7 @@ namespace YoutubeGenerator.Services
                                 ScheduledPublishTimeUtc = s.ScheduledPublishTime.ToString("o"),
                                 CreatedAt = s.CreatedAt,
                                 Countdown = "Published",
+                                Status = "published",
                                 IsFuture = false,
                                 IsUploadedYt = s.IsUploaded,
                                 YoutubeVideoId = s.YoutubeVideoId,
@@ -389,6 +590,7 @@ namespace YoutubeGenerator.Services
                                 ScheduledPublishTimeUtc = null,
                                 CreatedAt = null,
                                 Countdown = "Queued for Upload",
+                                Status = "queued",
                                 IsFuture = false,
                                 IsUploadedYt = false,
                                 YoutubeVideoId = null,

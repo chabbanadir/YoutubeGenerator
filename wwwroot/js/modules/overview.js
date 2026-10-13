@@ -377,40 +377,66 @@ function renderPublicationQueueItems() {
   const rowsHtml = items.map((item, index) => {
     const isShort = item.type === 'short';
     const kindKey = (item.kindKey || 'lol').toLowerCase();
-    const badgeTheme = kindKey === 'lol' ? 'lol' : (kindKey === 'valorant' ? 'valorant' : 'default');
     const streamer = item.streamer ? escapeHtml(item.streamer) : 'Streamer';
-    const title = escapeHtml(item.title || 'Untitled Video');
-    const safeTitle = escapeJsString(item.title || '');
+    const rawTitle = item.title || 'Untitled Video';
+    // Clean display title: strip redundant trailing hashtags like #Shorts #LoL #VALORANT to avoid cut-off ellipses
+    const displayTitle = rawTitle.replace(/\s*#\w+(\s*#\w+)*\s*$/g, '').trim() || rawTitle;
+    const title = escapeHtml(displayTitle);
+    const fullTitle = escapeHtml(rawTitle);
+    const safeTitle = escapeJsString(rawTitle);
     const duration = item.durationFormatted || '--';
     const slotNum = String(index + 1).padStart(2, '0');
     const isNext = index === 0 && currentQueueFilter !== 'published';
 
-    // Format Scheduled Time
+    // Format Scheduled Time and Status Pill
     let timePrimaryHtml = '--:--';
     let countdownBadgeHtml = '';
+
+    const isHeld = item.status === 'held' || (item.countdown && item.countdown.toLowerCase().includes('held'));
+
     if (item.scheduledPublishTimeUtc) {
       const pubDate = new Date(item.scheduledPublishTimeUtc);
       const isToday = new Date().toDateString() === pubDate.toDateString();
       const timeStr = pubDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const dateStr = isToday ? 'Today' : pubDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const dateTagHtml = isToday
+        ? `<span class="queue-date-tag is-today">Today</span>`
+        : `<span class="queue-date-tag is-future">${pubDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>`;
 
       const diffMs = pubDate.getTime() - Date.now();
       const diffHours = diffMs / (1000 * 60 * 60);
 
       let badgeClass = 'future';
-      if (diffHours > 0 && diffHours <= 1) {
-        badgeClass = 'imminent';
-      } else if (isToday && diffHours > 0) {
-        badgeClass = 'today';
-      } else if (diffHours <= 0) {
+      let iconName = 'clock';
+      let labelText = item.countdown || 'Scheduled';
+      let tooltipText = '';
+
+      if (isHeld) {
+        badgeClass = 'held';
+        iconName = 'pause-circle';
+        labelText = 'Held (Quota Cooldown)';
+        tooltipText = item.quotaReason || 'Upload delayed: Daily Shorts quota limit reached or pacing delay active';
+      } else if (item.status === 'published' || currentQueueFilter === 'published') {
+        badgeClass = 'published';
+        iconName = 'check-circle-2';
+        labelText = 'Published';
+      } else if (item.status === 'ready' || diffHours <= 0) {
         badgeClass = 'ready';
+        iconName = 'check-circle';
+        labelText = 'Ready to Upload';
+      } else if (diffHours > 0 && diffHours <= 1) {
+        badgeClass = 'imminent';
+        iconName = 'zap';
+        labelText = item.countdown;
+      } else if (isToday) {
+        badgeClass = 'today';
+        labelText = item.countdown;
       }
 
-      timePrimaryHtml = `${timeStr} <span class="queue-date-tag">${dateStr}</span>`;
+      timePrimaryHtml = `${timeStr} ${dateTagHtml}`;
       countdownBadgeHtml = `
-        <span class="queue-countdown-pill ${badgeClass}">
-          <i data-lucide="${badgeClass === 'imminent' ? 'zap' : 'clock'}" style="width: 10px; height: 10px;"></i>
-          ${escapeHtml(item.countdown)}
+        <span class="queue-countdown-pill ${badgeClass}" ${tooltipText ? `title="${escapeHtml(tooltipText)}"` : ''}>
+          <i data-lucide="${iconName}" style="width: 10px; height: 10px;"></i>
+          ${escapeHtml(labelText)}
         </span>
       `;
     } else {
@@ -423,16 +449,29 @@ function renderPublicationQueueItems() {
       `;
     }
 
-    // Platform status pills
-    const ytPill = item.isUploadedYt
-      ? `<span class="queue-platform-pill uploaded"><i data-lucide="check-circle" style="width: 10px; height: 10px;"></i> YouTube Live</span>`
-      : `<span class="queue-platform-pill pending"><i data-lucide="clock" style="width: 10px; height: 10px;"></i> YT Scheduled</span>`;
+    // Game tag + subtle format tag
+    const gameBadgeClass = kindKey === 'lol' ? 'lol' : (kindKey === 'valorant' ? 'valorant' : 'default');
+    const formatTagHtml = `
+      <span class="queue-format-badge ${isShort ? 'short' : 'montage'}">
+        <i data-lucide="${isShort ? 'smartphone' : 'film'}" style="width: 9px; height: 9px;"></i>
+        ${isShort ? 'Short' : 'Montage'}
+      </span>
+    `;
 
-    const tikTokPill = item.isUploadedTikTok
-      ? `<span class="queue-platform-pill uploaded">${getTiktokIcon(10, 'margin-right: 2px;')} TikTok Live</span>`
+    // Only display subKindKey if it is meaningful (skip generic "all", "normal", "default")
+    const subKindClean = (item.subKindKey || '').trim().toLowerCase();
+    const isSpecialSubKind = subKindClean && !['all', 'normal', 'default'].includes(subKindClean);
+
+    // Platform status micro-chips
+    const ytChip = item.isUploadedYt
+      ? `<span class="platform-chip live" title="YouTube: Uploaded & Live"><i data-lucide="check" style="width: 10px; height: 10px;"></i> YT Live</span>`
+      : `<span class="platform-chip queued" title="YouTube: In Schedule Pipeline"><i data-lucide="clock" style="width: 10px; height: 10px;"></i> YT Queued</span>`;
+
+    const tikTokChip = item.isUploadedTikTok
+      ? `<span class="platform-chip live" title="TikTok: Published"><i data-lucide="check" style="width: 10px; height: 10px;"></i> TT Live</span>`
       : isShort
-        ? `<span class="queue-platform-pill pending">${getTiktokIcon(10, 'margin-right: 2px;')} TikTok Queue</span>`
-        : `<span class="queue-platform-pill off">${getTiktokIcon(10, 'margin-right: 2px;')} N/A</span>`;
+        ? `<span class="platform-chip queued" title="TikTok: In upload queue">${getTiktokIcon(10, 'margin-right: 2px;')} TT Queued</span>`
+        : `<span class="platform-chip off" title="TikTok: Not applicable">—</span>`;
 
     return `
       <tr class="${isNext ? 'is-next-slot' : ''}">
@@ -449,28 +488,26 @@ function renderPublicationQueueItems() {
         </td>
         <td>
           <div class="queue-badges-cell">
-            <span class="queue-format-badge ${isShort ? 'short' : 'montage'}">
-              ${isShort ? 'Short' : 'Montage'}
-            </span>
-            <span class="profile-kind-badge ${badgeTheme}" style="font-size: 0.62rem; padding: 0.1rem 0.35rem;">
+            <span class="queue-game-badge ${gameBadgeClass}">
               ${escapeHtml(kindKey.toUpperCase())}
             </span>
+            ${formatTagHtml}
           </div>
         </td>
         <td>
           <div class="queue-title-cell">
-            <div class="queue-title-text" title="${title}">${title}</div>
+            <div class="queue-title-text" title="${fullTitle}">${title}</div>
             <div class="queue-title-sub">
-              <span class="queue-streamer-sub"><i data-lucide="user" style="width: 10px; height: 10px;"></i> @${streamer}</span>
+              <span class="queue-streamer-sub">${getTwitchIcon(10, 'margin-right: 2px;')} @${streamer}</span>
               <span class="queue-duration-sub"><i data-lucide="clock" style="width: 10px; height: 10px;"></i> ${escapeHtml(duration)}</span>
-              ${item.subKindKey ? `<span class="tag-chip" style="font-size: 0.6rem; padding: 0.05rem 0.3rem;">${escapeHtml(item.subKindKey.toUpperCase())}</span>` : ''}
+              ${isSpecialSubKind ? `<span class="queue-subkind-tag"><i data-lucide="tag" style="width: 9px; height: 9px;"></i> ${escapeHtml(item.subKindKey)}</span>` : ''}
             </div>
           </div>
         </td>
         <td>
           <div class="queue-platforms-cell">
-            ${ytPill}
-            ${tikTokPill}
+            ${ytChip}
+            ${tikTokChip}
           </div>
         </td>
         <td style="text-align: right;">
@@ -496,10 +533,10 @@ function renderPublicationQueueItems() {
         <thead>
           <tr>
             <th style="width: 50px; text-align: center;">SLOT</th>
-            <th style="width: 165px;">RELEASE TIME</th>
-            <th style="width: 130px;">FORMAT / GAME</th>
+            <th style="width: 175px;">RELEASE TIME</th>
+            <th style="width: 135px;">GAME / TYPE</th>
             <th>VIDEO TITLE & STREAMER</th>
-            <th style="width: 185px;">PLATFORMS</th>
+            <th style="width: 175px;">PLATFORMS</th>
             <th style="width: 65px; text-align: right;">ACTION</th>
           </tr>
         </thead>

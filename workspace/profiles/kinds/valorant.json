@@ -5,7 +5,7 @@
   "YoutubeClientSecret": "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",
   "YoutubeRefreshToken": "1//03KOQfKJauwy9CgYIARAAGAMSNwF-L9Ir0tuc1-H_0Lu20EOSGcka2n17uv461PkTX9Atym9v6AQIzwMMvx_wb3uQaro21Y2EK4U",
   "UploadConfig": {
-    "MinDelayHours": 8,
+    "MinDelayHours": 12,
     "LastUploadTime": "2025-12-17T00:00:00.00Z",
     "UploadCounter": 0,
     "Enabled": false

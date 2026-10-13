@@ -41,6 +41,7 @@ builder.Services.AddScoped<IMontageProfileService, MontageProfileService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IProfileManagementService, ProfileManagementService>();
 builder.Services.AddSingleton<IRenderTrackerService, RenderTrackerService>();
+builder.Services.AddSingleton<IYoutubeQuotaService, YoutubeQuotaService>();
 //builder.Services.AddScoped<VideoPipeline>();
 builder.Services.AddScoped<IYoutubeUploader, YoutubeUploader>();
 builder.Services.AddScoped<IThumbnailService, ThumbnailService>();
@@ -86,6 +87,17 @@ builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.C
     });
 builder.Services.AddAuthorization();
 
+// CORS for public portfolio API access
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
 // API
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
@@ -114,6 +126,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors("AllowAll");
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -156,11 +169,39 @@ try
     var youtubeFailedFile = Path.Combine(bagsDir, "bag_youtube_failed.json");
     if (File.Exists(youtubeFailedFile))
     {
+        string ResolveVideoPath(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return path ?? "";
+            if (File.Exists(path)) return path;
+            if (path.StartsWith("/app/workspace", StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = path.Substring("/app/workspace".Length).TrimStart('/', '\\');
+                var local = Path.Combine(app.Environment.ContentRootPath, "workspace", rel);
+                if (File.Exists(local)) return local;
+            }
+            var wsPrefix = Path.Combine(app.Environment.ContentRootPath, "workspace");
+            if (path.StartsWith(wsPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = path.Substring(wsPrefix.Length).TrimStart('/', '\\');
+                var inApp = Path.Combine("/app", "workspace", rel);
+                if (File.Exists(inApp)) return inApp;
+            }
+            return path;
+        }
+
         var ytFailed = JsonFileService.Load<List<MontageItem>>(youtubeFailedFile);
         var ytQueue = File.Exists(youtubeFile) ? JsonFileService.Load<List<MontageItem>>(youtubeFile) : new List<MontageItem>();
         if (ytQueue.Count == 0 && ytFailed != null && ytFailed.Count > 0)
         {
-            var recoverable = ytFailed.Where(p => !string.IsNullOrEmpty(p.FinalVideoPath) && File.Exists(p.FinalVideoPath)).ToList();
+            var recoverable = ytFailed.Where(p => {
+                var resolved = ResolveVideoPath(p.FinalVideoPath);
+                if (!string.IsNullOrEmpty(resolved) && File.Exists(resolved))
+                {
+                    p.FinalVideoPath = resolved;
+                    return true;
+                }
+                return false;
+            }).ToList();
             if (recoverable.Count > 0)
             {
                 foreach (var r in recoverable)

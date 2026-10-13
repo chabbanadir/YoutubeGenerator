@@ -217,7 +217,7 @@ namespace YoutubeGenerator.Services
                 {
                     try
                     {
-                        var coords = DetectWebcam(probeFrame, streamerName);
+                        var coords = DetectWebcam(probeFrame, streamerName, kindKey);
                         if (coords != null && coords.HasFacecam)
                         {
                             webcamCoords = coords;
@@ -320,7 +320,7 @@ namespace YoutubeGenerator.Services
             return await RunFfmpegCommandAsync(args);
         }
 
-        private WebcamCoordinates? DetectWebcam(string framePath, string? streamerName)
+        private WebcamCoordinates? DetectWebcam(string framePath, string? streamerName, string? kindKey = "lol")
         {
             try
             {
@@ -338,7 +338,7 @@ namespace YoutubeGenerator.Services
                 var psi = new ProcessStartInfo
                 {
                     FileName = "python3",
-                    Arguments = $"\"{scriptPath}\" \"{framePath}\" \"{streamerName ?? ""}\"",
+                    Arguments = $"\"{scriptPath}\" \"{framePath}\" \"{streamerName ?? ""}\" \"{kindKey ?? "lol"}\"",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,

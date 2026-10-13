@@ -18,6 +18,7 @@ namespace YoutubeGenerator.Services
         private readonly ILlmService _llmService;
         private readonly IThumbnailService _thumbnailService;
         private readonly ITikTokAuthService _tikTokAuthService;
+        private readonly IYoutubeQuotaService _quotaService;
         private readonly IRenderTrackerService? _renderTracker;
         private readonly string _bagShorts;
         private readonly string _backoffFile;
@@ -32,6 +33,7 @@ namespace YoutubeGenerator.Services
             ILlmService llmService,
             IThumbnailService thumbnailService,
             ITikTokAuthService tikTokAuthService,
+            IYoutubeQuotaService quotaService,
             IRenderTrackerService? renderTracker = null)
         {
             _logger = logger;
@@ -40,6 +42,7 @@ namespace YoutubeGenerator.Services
             _llmService = llmService;
             _thumbnailService = thumbnailService;
             _tikTokAuthService = tikTokAuthService;
+            _quotaService = quotaService;
             _renderTracker = renderTracker;
 
             string bagsDir = Path.Combine(env.ContentRootPath, "workspace", "bags");
@@ -222,6 +225,14 @@ namespace YoutubeGenerator.Services
             if (nextShort == null)
                 return false;
 
+            // YouTube Quota & Long Video Balance Gatekeeper
+            if (!_quotaService.CanUploadShort(nextShort.KindKey, out string quotaReason))
+            {
+                _logger.LogInformation($"[ShortsScheduler] Postponing Short '{nextShort.Title}': {quotaReason}");
+                _renderTracker?.AddLog("shorts", $"⏳ Postponing Short '{nextShort.Title}': {quotaReason}");
+                return false;
+            }
+
             try
             {
                 var creds = _profileService.GetYoutubeCredentials(nextShort.KindKey);
@@ -265,9 +276,13 @@ namespace YoutubeGenerator.Services
                         {
                             match.IsUploaded = true;
                             match.YoutubeVideoId = videoId;
+                            match.YoutubeUploadedAt = DateTime.UtcNow;
                             JsonFileService.Save(_bagShorts, bag);
                         }
                     }
+
+                    // Record upload in persistent quota tracker
+                    await _quotaService.RecordUploadAsync(nextShort.KindKey, "short", videoId);
 
                     // STRICT CLEANUP RULE:
                     // Only delete the short video file and thumbnail if published on BOTH YouTube AND TikTok.
