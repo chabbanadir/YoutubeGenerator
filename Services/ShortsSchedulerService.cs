@@ -184,11 +184,22 @@ namespace YoutubeGenerator.Services
             lock (_fileLock)
             {
                 var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
-                // Pick next short that is not uploaded, file exists, and its channel is not currently backed off due to quota limit
-                nextShort = bag.FirstOrDefault(s =>
-                    !s.IsUploaded &&
-                    File.Exists(s.FilePath) &&
-                    !IsChannelBackedOff(s.KindKey, out _));
+                // Pick next short that is not uploaded, file exists, and its channel is not currently backed off
+                var candidates = bag
+                    .Where(s => !s.IsUploaded && File.Exists(s.FilePath) && !IsChannelBackedOff(s.KindKey, out _))
+                    .OrderBy(s => s.ScheduledPublishTime)
+                    .ToList();
+
+                // Find the first eligible short whose channel is clear (not held by quota or pacing)
+                // This ensures Channel A (e.g. LoL on cooldown) never blocks Channel B (e.g. Valorant ready)
+                foreach (var candidate in candidates)
+                {
+                    if (_quotaService.CanUploadShort(candidate.KindKey, out _))
+                    {
+                        nextShort = candidate;
+                        break;
+                    }
+                }
 
                 // If the selected short has a stale ScheduledPublishTime (in the past),
                 // reschedule it to a valid future time. YouTube rejects PublishAt in the past.
@@ -225,7 +236,7 @@ namespace YoutubeGenerator.Services
             if (nextShort == null)
                 return false;
 
-            // YouTube Quota & Long Video Balance Gatekeeper
+            // YouTube Quota & Long Video Balance Gatekeeper (double check)
             if (!_quotaService.CanUploadShort(nextShort.KindKey, out string quotaReason))
             {
                 _logger.LogInformation($"[ShortsScheduler] Postponing Short '{nextShort.Title}': {quotaReason}");
