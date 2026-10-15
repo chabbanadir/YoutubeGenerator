@@ -58,7 +58,23 @@ namespace YoutubeGenerator.Services
                 text = truncated + "\n...";
             }
 
+            // Strip illegal YouTube characters '<' and '>' which cause HTTP 400 invalid video description
+            text = text.Replace("<", "").Replace(">", "");
+
             return text;
+        }
+
+        public static string SanitizeTitle(string input, int maxLength = 100)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+                return input ?? "";
+
+            var clean = input.Replace("<", "").Replace(">", "").Trim();
+            if (clean.Length > maxLength)
+            {
+                clean = clean.Substring(0, maxLength);
+            }
+            return clean;
         }
     }
 

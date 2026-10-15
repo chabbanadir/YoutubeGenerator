@@ -56,13 +56,14 @@ namespace YoutubeGenerator.Services
         {
             var youtube = CreateYouTubeService(creds);
 
+            var safeTitle = TextFormatter.SanitizeTitle(title ?? "");
             var safeDescription = TextFormatter.FixDescription(description ?? "", 4800);
 
             var video = new Video
             {
                 Snippet = new VideoSnippet
                 {
-                    Title = title,
+                    Title = safeTitle,
                     Description = safeDescription,
                     CategoryId = "20", // 20 = Gaming (24 was Entertainment)
                     DefaultLanguage = "en",
