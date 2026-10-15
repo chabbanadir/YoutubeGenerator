@@ -543,5 +543,51 @@ namespace YoutubeGenerator.Services
             [JsonPropertyName("h")]
             public int H { get; set; }
         }
+
+        public async Task<string> ConcatCatchWithShortAsync(string catchShortPath, string mainShortPath, string outputPath)
+        {
+            if (!File.Exists(catchShortPath) || !File.Exists(mainShortPath))
+                throw new FileNotFoundException("Catch short or main short missing for concatenation.");
+
+            string tempDir = Path.GetDirectoryName(outputPath) ?? "";
+            string listFile = Path.Combine(tempDir, $"concat_catch_{Guid.NewGuid():N}.txt");
+            string tempOut = Path.Combine(tempDir, $"final_catch_{Guid.NewGuid():N}.mp4");
+
+            try
+            {
+                var lines = new[]
+                {
+                    $"file '{catchShortPath.Replace("'", "'\\''")}'",
+                    $"file '{mainShortPath.Replace("'", "'\\''")}'"
+                };
+                await File.WriteAllLinesAsync(listFile, lines);
+
+                // Try stream copy demuxer first (instantaneous)
+                string args = $"-y -f concat -safe 0 -i \"{listFile}\" -c copy \"{tempOut}\"";
+                var (code, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", args, tempDir);
+
+                if (code != 0 || !File.Exists(tempOut))
+                {
+                    // Fallback to filter_complex re-encode concat
+                    string filterArgs = $"-y -i \"{catchShortPath}\" -i \"{mainShortPath}\" -filter_complex \"[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]\" -map \"[v]\" -map \"[a]\" -c:v libx264 -preset superfast -crf 20 -c:a aac -b:a 192k \"{tempOut}\"";
+                    var (fCode, fOut, fErr) = await ProcessRunner.RunAsync("ffmpeg", filterArgs, tempDir);
+                    if (fCode != 0 || !File.Exists(tempOut))
+                    {
+                        throw new Exception($"Failed to concatenate catch teaser with short: {fErr}");
+                    }
+                }
+
+                if (File.Exists(outputPath))
+                    File.Delete(outputPath);
+
+                File.Move(tempOut, outputPath);
+                return outputPath;
+            }
+            finally
+            {
+                if (File.Exists(listFile)) try { File.Delete(listFile); } catch { }
+                if (File.Exists(tempOut)) try { File.Delete(tempOut); } catch { }
+            }
+        }
     }
 }

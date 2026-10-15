@@ -277,7 +277,64 @@ namespace YoutubeGenerator.Workers
                                 var shortPath = await _shortsRender.GenerateShortAsync(trimResult.File, dirShorts, clip.KindKey, clip.Description, clip.SubKindKey, clip.ShortLayout);
                                 if (!string.IsNullOrEmpty(shortPath))
                                 {
-                                    await _shortsScheduler.QueueShortAsync(shortPath, clip, trimResult.Duration);
+                                    double finalDuration = trimResult.Duration;
+
+                                    // ⚡ CATCH HOOK (2 seconds of action prepended at start)
+                                    if (!string.IsNullOrWhiteSpace(clip.CatchStart))
+                                    {
+                                        try
+                                        {
+                                            _renderTracker?.AddLog($"⚡ [Catch Hook] Extracting 2s action at {clip.CatchStart} (x2: {clip.CatchAccelerate})...", "step");
+
+                                            string sourceForCatch = File.Exists(rawFilePath) ? rawFilePath : trimResult.File;
+                                            var catchSnippet = await _trim.ExtractCatchSnippetAsync(
+                                                sourceForCatch,
+                                                clip.CatchStart,
+                                                clip.CatchAccelerate,
+                                                dirTrim,
+                                                worker.TrimCounter);
+
+                                            if (!string.IsNullOrEmpty(catchSnippet) && File.Exists(catchSnippet))
+                                            {
+                                                var dirCatchShorts = Path.Combine(dirShorts, "temp_catch");
+                                                var catchShortPath = await _shortsRender.GenerateShortAsync(
+                                                    catchSnippet,
+                                                    dirCatchShorts,
+                                                    clip.KindKey,
+                                                    clip.Description,
+                                                    clip.SubKindKey,
+                                                    clip.ShortLayout);
+
+                                                if (!string.IsNullOrEmpty(catchShortPath) && File.Exists(catchShortPath))
+                                                {
+                                                    string finalMergedPath = Path.Combine(dirShorts, $"final_short_{Path.GetFileName(shortPath)}");
+                                                    await _shortsRender.ConcatCatchWithShortAsync(catchShortPath, shortPath, finalMergedPath);
+
+                                                    if (File.Exists(finalMergedPath))
+                                                    {
+                                                        File.Delete(shortPath);
+                                                        File.Move(finalMergedPath, shortPath);
+
+                                                        double catchDuration = clip.CatchAccelerate ? 1.0 : 2.0;
+                                                        finalDuration += catchDuration;
+
+                                                        _renderTracker?.AddLog($"✅ [Catch Hook] Successfully prepended {catchDuration:0.0}s hook to short!", "success");
+                                                    }
+                                                }
+
+                                                if (File.Exists(catchSnippet)) try { File.Delete(catchSnippet); } catch { }
+                                                if (Directory.Exists(dirCatchShorts))
+                                                    try { Directory.Delete(dirCatchShorts, true); } catch { }
+                                            }
+                                        }
+                                        catch (Exception exCatch)
+                                        {
+                                            _logger.LogWarning(exCatch, $"⚠️ Failed to prepend catch hook for {clip.Link}, continuing with standard short.");
+                                            _renderTracker?.AddLog($"⚠️ [Catch Hook] Failed to prepend hook: {exCatch.Message}, standard short preserved.", "warning");
+                                        }
+                                    }
+
+                                    await _shortsScheduler.QueueShortAsync(shortPath, clip, finalDuration);
                                 }
                             }
                             catch (Exception exShort)

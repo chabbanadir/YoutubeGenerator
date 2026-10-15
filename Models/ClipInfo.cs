@@ -28,6 +28,12 @@ namespace YoutubeGenerator.Models
         [JsonPropertyName("ShortLayout")]
         public string ShortLayout { get; set; } = "ambient";
 
+        [JsonPropertyName("CatchStart")]
+        public string? CatchStart { get; set; }
+
+        [JsonPropertyName("CatchAccelerate")]
+        public bool CatchAccelerate { get; set; } = false;
+
         public DateTime? ImportedAt { get; set; } = DateTime.UtcNow;
 
         public string UniqueKey()

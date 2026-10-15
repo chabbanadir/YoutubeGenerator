@@ -53,6 +53,15 @@ namespace YoutubeGenerator.Services
                     ? rawSubKind
                     : (isShort ? "" : "default");
 
+                bool catchAccelerate = false;
+                if (!string.IsNullOrWhiteSpace(rec.CatchAccelerate))
+                {
+                    var accVal = rec.CatchAccelerate.Trim().ToLowerInvariant();
+                    catchAccelerate = accVal == "true" || accVal == "1" || accVal == "yes" || accVal == "x2" || accVal == "2";
+                }
+
+                string? catchStart = string.IsNullOrWhiteSpace(rec.CatchStart) ? null : rec.CatchStart.Trim();
+
                 var clip = new ClipInfo
                 {
                     Link = rec.Link?.Trim(),
@@ -62,7 +71,9 @@ namespace YoutubeGenerator.Services
                     KindKey = string.IsNullOrWhiteSpace(rec.KindKey) ? "default" : rec.KindKey.Trim(),
                     SubKindKey = subKindKey,
                     IsShort = isShort,
-                    ShortLayout = shortLayout
+                    ShortLayout = shortLayout,
+                    CatchStart = catchStart,
+                    CatchAccelerate = catchAccelerate
                 };
 
                 Console.WriteLine(
@@ -109,6 +120,14 @@ namespace YoutubeGenerator.Services
             [CsvHelper.Configuration.Attributes.Name("shortlayout", "layout")]
             [CsvHelper.Configuration.Attributes.Optional]
             public string? ShortLayout { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("catch_start", "catchstart", "catch", "hook", "hook_start", "hookstart")]
+            [CsvHelper.Configuration.Attributes.Optional]
+            public string? CatchStart { get; set; }
+
+            [CsvHelper.Configuration.Attributes.Name("catch_accelerate", "catchaccelerate", "accelerate", "speed_x2", "speedx2", "x2")]
+            [CsvHelper.Configuration.Attributes.Optional]
+            public string? CatchAccelerate { get; set; }
         }
     }
 }

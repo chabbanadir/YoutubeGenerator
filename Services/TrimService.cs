@@ -211,5 +211,48 @@ namespace YoutubeGenerator.Services
                     try { File.Delete(tempOutputPath); } catch { }
             }
         }
+
+        public async Task<string?> ExtractCatchSnippetAsync(
+            string inputFile,
+            string catchStart,
+            bool accelerateX2,
+            string outputDir,
+            int index)
+        {
+            if (string.IsNullOrWhiteSpace(catchStart) || !File.Exists(inputFile))
+                return null;
+
+            Directory.CreateDirectory(outputDir);
+            string outputPath = Path.Combine(outputDir, $"catch_{index}.mp4");
+            string start = NormalizeTime(catchStart);
+
+            // 2 seconds of action: -t 00:00:02
+            // If accelerateX2: speed up video by 2x (setpts=0.5*PTS) and audio by 2x (atempo=2.0)
+            string videoFilters = "fps=30,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p";
+            string audioFilters = "loudnorm=I=-14:TP=-1.5:LRA=11";
+
+            if (accelerateX2)
+            {
+                videoFilters = "setpts=0.5*PTS," + videoFilters;
+                audioFilters = "atempo=2.0," + audioFilters;
+            }
+
+            string args =
+                $"-y -ss {start} -t 00:00:02 -i \"{inputFile}\" " +
+                $"-vf \"{videoFilters}\" " +
+                $"-af \"{audioFilters}\" " +
+                "-c:v libx264 -preset superfast -crf 20 -pix_fmt yuv420p " +
+                "-c:a aac -b:a 192k -ar 48000 -ac 2 " +
+                $"\"{outputPath}\"";
+
+            var (code, stdout, stderr) = await ProcessRunner.RunAsync("ffmpeg", args, outputDir);
+            if (code != 0 || !File.Exists(outputPath))
+            {
+                _renderTracker?.AddLog($"⚠️ [Catch Extract] FFmpeg failed: {stderr}", "warning");
+                return null;
+            }
+
+            return outputPath;
+        }
     }
 }

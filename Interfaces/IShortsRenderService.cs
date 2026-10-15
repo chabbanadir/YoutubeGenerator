@@ -10,5 +10,6 @@ namespace YoutubeGenerator.Interfaces
         /// or Option B (Ambient Blurred Background) for LoL and clips without webcam.
         /// </summary>
         Task<string?> GenerateShortAsync(string inputVideoPath, string outputDir, string kindKey, string? streamerName = null, string? subKindKey = null, string? shortLayout = "ambient");
+        Task<string> ConcatCatchWithShortAsync(string catchShortPath, string mainShortPath, string outputPath);
     }
 }
