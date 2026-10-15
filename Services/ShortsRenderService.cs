@@ -270,8 +270,8 @@ namespace YoutubeGenerator.Services
                 filterComplex =
                     $"[0:v]scale=1920:1080[norm];" +
                     $"[norm]split=2[n1][n2];" +
-                    $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680[cam];" +
-                    $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
+                    $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680:(in_w-1080)/2:0[cam];" +
+                    $"[n2]crop=1080:960:420:90,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
                     $"[cam][game]vstack=inputs=2,drawbox=y=676:color={dividerColor}:t=8[v1];" +
                     $"[1:v]scale=680:-1[sub];" +
                     $"[v1][sub]overlay=(W-w)/2:1500:enable='between(t,{tStartStr},{tEndStr})'[v]";
@@ -282,8 +282,8 @@ namespace YoutubeGenerator.Services
                 filterComplex =
                     $"[0:v]scale=1920:1080[norm];" +
                     $"[norm]split=2[n1][n2];" +
-                    $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680[cam];" +
-                    $"[n2]crop=1080:1080:420:0,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
+                    $"[n1]crop={coords.W}:{coords.H}:{coords.X}:{coords.Y},scale=1080:680:force_original_aspect_ratio=increase,crop=1080:680:(in_w-1080)/2:0[cam];" +
+                    $"[n2]crop=1080:960:420:90,scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240[game];" +
                     $"[cam][game]vstack=inputs=2,drawbox=y=676:color={dividerColor}:t=8[v]";
             }
 

@@ -185,7 +185,8 @@ for cfg in configs:
         out_local = f"/tmp/thumb_{vid}.jpg"
 
         filter_graph = (
-            "[0:v]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,eq=contrast=1.15:saturation=1.25[bg];"
+            "[0:v]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,eq=contrast=1.15:saturation=1.25,"
+            "drawbox=x=0:y=390:w=350:h=330:color=black@0.60:t=fill[bg];"
             f"[1:v]scale=-1:490[creator];"
             f"[bg][creator]overlay=x=W-w:y=H-h[layer];"
             f"[layer]drawtext=fontfile='{font_path}':text='{hook}':fontcolor=0xFFE600:fontsize=96:borderw=10:bordercolor=black:x=60:y=40[out]"

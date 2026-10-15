@@ -340,8 +340,10 @@ namespace YoutubeGenerator.Services
             // 2. Creator cutout on bottom-right (scaled cleanly to height 490, covers corner webcam)
             if (creatorIndex.HasValue)
             {
+                // Subdue any existing in-game webcam on bottom-left to prevent confusing dual-webcam collision
+                filter.Add($"{currentLayer}drawbox=x=0:y=390:w=350:h=330:color=black@0.60:t=fill[bg_vignette]");
                 filter.Add($"[{creatorIndex.Value}:v]scale=-1:490[creator]");
-                filter.Add($"{currentLayer}[creator]overlay=x=W-w:y=H-h[layer_creator]");
+                filter.Add($"[bg_vignette][creator]overlay=x=W-w:y=H-h[layer_creator]");
                 currentLayer = "[layer_creator]";
             }
 

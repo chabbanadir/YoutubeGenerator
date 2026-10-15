@@ -63,10 +63,18 @@ CASCADE_CANDIDATE_PATHS = [
     "/usr/share/opencv/haarcascades/haarcascade_profileface.xml",
 ]
 
+EYE_CASCADE_CANDIDATE_PATHS = [
+    "/usr/share/opencv4/haarcascades/haarcascade_eye.xml",
+    "/usr/share/opencv4/haarcascades/haarcascade_eye_tree_eyeglasses.xml",
+    "/usr/share/opencv/haarcascades/haarcascade_eye.xml",
+    "/usr/share/opencv/haarcascades/haarcascade_eye_tree_eyeglasses.xml",
+]
+
 def has_skin_tones(bgr_crop):
     """
     Check if a candidate crop has realistic human skin tones.
-    Prevents false triggers on text, donation goals, in-game foliage, and HUD graphics.
+    Combines YCrCb and HSV color spaces to strictly eliminate false triggers
+    on text, donation goals, in-game rocks, grass, and HUD graphics.
     """
     if bgr_crop is None or bgr_crop.size == 0:
         return False
@@ -74,18 +82,31 @@ def has_skin_tones(bgr_crop):
         import cv2
         import numpy as np
 
+        # 1. YCrCb skin threshold (standard human skin gamut)
         ycrcb = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2YCrCb)
-        # Standard human skin gamut in YCrCb
-        lower_skin = np.array([0, 133, 77], dtype=np.uint8)
-        upper_skin = np.array([255, 173, 127], dtype=np.uint8)
-        mask = cv2.inRange(ycrcb, lower_skin, upper_skin)
+        lower_ycrcb = np.array([0, 135, 85], dtype=np.uint8)
+        upper_ycrcb = np.array([255, 175, 135], dtype=np.uint8)
+        mask_ycrcb = cv2.inRange(ycrcb, lower_ycrcb, upper_ycrcb)
+
+        # 2. HSV skin threshold (excludes green grass, cyan spells, pure white text)
+        hsv = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2HSV)
+        lower_hsv1 = np.array([0, 25, 50], dtype=np.uint8)
+        upper_hsv1 = np.array([25, 210, 255], dtype=np.uint8)
+        mask_hsv1 = cv2.inRange(hsv, lower_hsv1, upper_hsv1)
+        lower_hsv2 = np.array([165, 25, 50], dtype=np.uint8)
+        upper_hsv2 = np.array([180, 210, 255], dtype=np.uint8)
+        mask_hsv2 = cv2.inRange(hsv, lower_hsv2, upper_hsv2)
+        mask_hsv = cv2.bitwise_or(mask_hsv1, mask_hsv2)
+
+        # Combined intersection of both color spaces
+        combined_mask = cv2.bitwise_and(mask_ycrcb, mask_hsv)
 
         total_pixels = bgr_crop.shape[0] * bgr_crop.shape[1]
-        skin_pixels = cv2.countNonZero(mask)
+        skin_pixels = cv2.countNonZero(combined_mask)
         skin_ratio = skin_pixels / float(max(1, total_pixels))
 
-        # Real streamer face crops have at least 12% skin tone pixels
-        return skin_ratio >= 0.12
+        # Real streamer face crops have at least 18% skin tone pixels
+        return skin_ratio >= 0.18
     except Exception:
         return False
 
@@ -115,24 +136,21 @@ def verify_preset_region(img, preset, valid_cascades):
         if crop.size == 0:
             return False
 
-        # 1. Quick skin tone presence check
-        if has_skin_tones(crop):
-            return True
-
-        # 2. Check if any face cascade fires inside preset crop
+        # Require an actual face cascade detection inside the preset region
         gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         for cascade_path in valid_cascades:
             face_cascade = cv2.CascadeClassifier(cascade_path)
             faces = face_cascade.detectMultiScale(
-                gray_crop, scaleFactor=1.1, minNeighbors=3, minSize=(40, 40)
+                gray_crop, scaleFactor=1.1, minNeighbors=4, minSize=(35, 35)
             )
-            if len(faces) > 0:
-                return True
+            for (fx, fy, fw, fh) in faces:
+                face_subcrop = crop[fy:fy+fh, fx:fx+fw]
+                if has_skin_tones(face_subcrop):
+                    return True
 
         return False
     except Exception:
-        # If OpenCV fails, conservatively accept preset as fallback
-        return True
+        return False
 
 def is_in_game_hud(cx, cy, fw, fh, game_kind):
     """
@@ -141,46 +159,48 @@ def is_in_game_hud(cx, cy, fw, fh, game_kind):
     gk = (game_kind or "lol").lower()
 
     if gk == "lol":
-        # 1. League of Legends Top-Left Target/Champion Inspector Frame:
-        # When clicking any champion (e.g. Darius), stats & circle portrait appear at x: 0..380, y: 0..280.
-        # This is NEVER a real webcam unless it's a massive webcam covering that corner.
-        if cx < 380 and cy < 280:
+        # 1. League of Legends Top-Left Target/Champion Inspector Frame & Donation text:
+        if cx < 400 and cy < 280:
             return True
 
-        # 2. Top scoreboard (Game time, kills, dragon icons):
-        if cy < 120:
+        # 2. Top scoreboard / kill scores / timers / donation goals:
+        if cy < 160:
             return True
 
-        # 3. Center combat arena (crosshair / champions fighting):
-        if 540 <= cx <= 1380 and 150 <= cy <= 860:
+        # 3. Center combat arena & TAB scoreboard (covers x: 450..1470, y: 130..880):
+        if 450 <= cx <= 1470 and 130 <= cy <= 880:
             return True
 
         # 4. Bottom ability bar (skills, items, own portrait):
-        if cy > 800 and 400 <= cx <= 1520:
+        if cy > 780 and 380 <= cx <= 1540:
+            return True
+
+        # 5. Bottom-Right minimap:
+        if cx > 1580 and cy > 760:
             return True
 
     elif gk == "valorant":
-        # 1. Top round timer & agent portraits:
-        if cy < 140:
+        # 1. Top round timer, agent portraits & donation bars:
+        if cy < 160:
             return True
 
         # 2. Top-Left minimap:
-        if cx < 360 and cy < 360:
+        if cx < 380 and cy < 380:
             return True
 
-        # 3. Center combat arena & crosshair:
-        if 550 <= cx <= 1370 and 200 <= cy <= 880:
+        # 3. Center combat arena & crosshair / TAB scoreboard:
+        if 480 <= cx <= 1440 and 160 <= cy <= 880:
             return True
 
         # 4. Bottom abilities / ammo / weapons bar:
-        if cy > 880 and 400 <= cx <= 1520:
+        if cy > 840 and 380 <= cx <= 1540:
             return True
 
     else:
         # Generic game exclusions: center arena and extreme edges
-        if 550 <= cx <= 1370 and 200 <= cy <= 880:
+        if 480 <= cx <= 1440 and 140 <= cy <= 880:
             return True
-        if cy < 110:
+        if cy < 140:
             return True
 
     return False
@@ -190,16 +210,22 @@ def detect_facecam(frame_path, streamer_name="", game_kind="lol"):
 
     # Resolve OpenCV cascades if available
     valid_cascades = []
+    eye_cascades = []
     cv2_module = None
     try:
         import cv2
         cv2_module = cv2
         valid_cascades = [p for p in CASCADE_CANDIDATE_PATHS if os.path.exists(p)]
+        eye_cascades = [p for p in EYE_CASCADE_CANDIDATE_PATHS if os.path.exists(p)]
         if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
             for std_name in ["haarcascade_frontalface_alt2.xml", "haarcascade_frontalface_alt.xml", "haarcascade_frontalface_default.xml", "haarcascade_profileface.xml"]:
                 std_path = cv2.data.haarcascades + std_name
                 if os.path.exists(std_path) and std_path not in valid_cascades:
                     valid_cascades.append(std_path)
+            for std_eye in ["haarcascade_eye.xml", "haarcascade_eye_tree_eyeglasses.xml"]:
+                eye_path = cv2.data.haarcascades + std_eye
+                if os.path.exists(eye_path) and eye_path not in eye_cascades:
+                    eye_cascades.append(eye_path)
     except Exception:
         pass
 
@@ -214,8 +240,7 @@ def detect_facecam(frame_path, streamer_name="", game_kind="lol"):
                     if img is not None:
                         if verify_preset_region(img, coords, valid_cascades):
                             return coords
-                        # Preset ROI has no face/skin (streamer playing with no cam or moved it)
-                        # Do NOT blindly return preset! Continue to full frame search.
+                        # Preset ROI has no verified face -> continue to full frame search
                         break
                 except Exception:
                     return coords
@@ -235,9 +260,9 @@ def detect_facecam(frame_path, streamer_name="", game_kind="lol"):
 
                 for cascade_path in valid_cascades:
                     face_cascade = cv2.CascadeClassifier(cascade_path)
-                    # minNeighbors=4 and minSize=(50, 50) prevents false positives on text and icons
+                    # minNeighbors=6 and minSize=(55, 55) strictly prevents false positives on text and icons
                     faces = face_cascade.detectMultiScale(
-                        gray, scaleFactor=1.08, minNeighbors=4, minSize=(50, 50)
+                        gray, scaleFactor=1.08, minNeighbors=6, minSize=(55, 55)
                     )
 
                     for (fx, fy, fw, fh) in faces:
@@ -250,7 +275,13 @@ def detect_facecam(frame_path, streamer_name="", game_kind="lol"):
                         cx = real_fx + real_fw // 2
                         cy = real_fy + real_fh // 2
 
-                        # Filter out in-game HUDs (champion stats box, abilities, center arena)
+                        # Face bounding box aspect ratio check: must be reasonably proportional (0.75 <= h/w <= 1.45)
+                        # Text lines and banners have extreme aspect ratios and are filtered out immediately
+                        aspect_ratio = real_fh / float(max(1, real_fw))
+                        if aspect_ratio < 0.75 or aspect_ratio > 1.45:
+                            continue
+
+                        # Filter out in-game HUDs, scoreboard, minimap, and central combat arena
                         if is_in_game_hud(cx, cy, real_fw, real_fh, game_kind):
                             continue
 
@@ -261,14 +292,13 @@ def detect_facecam(frame_path, streamer_name="", game_kind="lol"):
                         crop_x2 = max(crop_x1 + 1, min(w, fx + fw))
                         face_crop = img[crop_y1:crop_y2, crop_x1:crop_x2]
 
-                        # Verify human skin tones (eliminates donation goals, spell particles, rocks)
+                        # Verify human skin tones in dual YCrCb + HSV space
                         if not has_skin_tones(face_crop):
                             continue
 
                         # Calculate score based on webcam quadrant preference & face size
-                        # Streamer cameras are commonly in corners or side panels
                         score = real_fw * real_fh
-                        if cx >= 1350 and cy >= 650:  # Bottom right (very common in LoL)
+                        if cx >= 1350 and cy >= 650:  # Bottom right (most common in LoL)
                             score *= 1.4
                         elif cx <= 450 and cy >= 650:  # Bottom left
                             score *= 1.3
@@ -290,11 +320,14 @@ def detect_facecam(frame_path, streamer_name="", game_kind="lol"):
                     bfx, bfy, bfw, bfh = best["fx"], best["fy"], best["fw"], best["fh"]
                     bcx, bcy = best["cx"], best["cy"]
 
-                    cam_w = 440
-                    cam_h = 265  # 16:9 standard Short facecam crop
+                    # Exact 1080:680 ratio (1.5862) to prevent any aspect-ratio stretching or cropping in FFmpeg
+                    cam_w = 460
+                    cam_h = 290
 
-                    # Position head naturally in upper 35% of camera window
-                    cam_y = max(0, min(1080 - cam_h, bfy - int(bfh * 0.35)))
+                    # Natural head framing with generous headroom (75% of face height above eyebrows)
+                    # Prevents head, hair, headphones or caps from being truncated
+                    headroom = int(bfh * 0.75)
+                    cam_y = max(0, min(1080 - cam_h, bfy - headroom))
                     cam_x = max(0, min(1920 - cam_w, bcx - cam_w // 2))
 
                     return {
@@ -316,3 +349,4 @@ if __name__ == "__main__":
     game_arg = sys.argv[3] if len(sys.argv) > 3 else "lol"
     result = detect_facecam(frame_arg, streamer_arg, game_arg)
     print(json.dumps(result))
+
