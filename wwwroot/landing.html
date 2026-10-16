@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="tiktok-developers-site-verification" content="vLvgyxauHoVUF1J9mmN4q5zrSQfatgZo">
+    <meta name="tiktok-developers-site-verification" content="tiktok-developers-site-verification=vLvgyxauHoVUF1J9mmN4q5zrSQfatgZo">
+    <meta name="tiktok-developers-site-verification" content="vqUhtxH0nFSUCqaKLqLmrWTCAA3foLbb">
+    <meta name="tiktok-developers-site-verification" content="tiktok-developers-site-verification=vqUhtxH0nFSUCqaKLqLmrWTCAA3foLbb">
+    
+    <title>Summoner's Spells - Automated Gaming Highlight Publisher for TikTok & YouTube</title>
+    <meta name="description" content="Summoner's Spells is an automated gaming highlight curation and multi-platform publishing platform integrating TikTok Content Posting API and YouTube Data API.">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#ecfeff',
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            tiktok: '#ff0050',
+                            youtube: '#ff0000',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .hero-glow {
+            background: radial-gradient(circle at 50% 20%, rgba(6, 182, 212, 0.18) 0%, rgba(15, 23, 42, 0) 70%);
+        }
+        .card-glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen selection:bg-cyan-500 selection:text-slate-950">
+
+    <!-- Navigation -->
+    <header class="sticky top-0 z-50 backdrop-blur-md bg-slate-950/80 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3 group">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform">
+                    <i data-lucide="sparkles" class="w-5 h-5 text-white"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">Summoner's Spells</span>
+                    <span class="hidden sm:inline-block ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-400 border border-cyan-800/60">Creator Suite</span>
+                </div>
+            </a>
+
+            <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
+                <a href="#features" class="hover:text-cyan-400 transition-colors">Features</a>
+                <a href="#how-it-works" class="hover:text-cyan-400 transition-colors">How It Works</a>
+                <a href="#integration" class="hover:text-cyan-400 transition-colors">TikTok & YouTube APIs</a>
+                <a href="#security" class="hover:text-cyan-400 transition-colors">Privacy & Security</a>
+                <a href="/terms.html" class="hover:text-cyan-400 transition-colors">Terms</a>
+                <a href="/privacy.html" class="hover:text-cyan-400 transition-colors">Privacy</a>
+            </nav>
+
+            <div class="flex items-center gap-3">
+                <a href="/youtube/" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/25 transition-all transform hover:-translate-y-0.5">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 text-slate-950"></i>
+                    <span>App Dashboard</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="relative pt-24 pb-20 overflow-hidden hero-glow">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <!-- Badge -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-slate-900/90 border border-slate-700 shadow-inner mb-8">
+                <span class="flex h-2 w-2 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                </span>
+                <span class="text-xs font-semibold text-slate-300 tracking-wide uppercase">Integrated with Official TikTok & YouTube APIs</span>
+            </div>
+
+            <!-- Main Heading -->
+            <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-[1.1]">
+                Automate Your Gaming Highlights for <span class="bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-400 bg-clip-text text-transparent">TikTok & Shorts</span>
+            </h1>
+
+            <p class="mt-6 text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                Summoner's Spells transforms live gaming gameplay into engaging short-form vertical clips. Built for creators to curate, format, and publish directly to authorized TikTok and YouTube channels.
+            </p>
+
+            <!-- Action Buttons -->
+            <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
+                <a href="/youtube/" class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-base shadow-xl shadow-cyan-500/25 transition-all transform hover:-translate-y-0.5">
+                    <i data-lucide="play" class="w-5 h-5 fill-current"></i>
+                    <span>Connect Accounts & Launch</span>
+                </a>
+                <a href="#how-it-works" class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-semibold text-base transition-colors">
+                    <i data-lucide="info" class="w-5 h-5 text-slate-400"></i>
+                    <span>Explore Workflow</span>
+                </a>
+            </div>
+
+            <!-- Platform Highlights -->
+            <div class="mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto text-left">
+                <div class="card-glass rounded-2xl p-5 border border-slate-800">
+                    <div class="text-cyan-400 font-bold text-2xl">OAuth 2.0</div>
+                    <div class="text-slate-400 text-sm mt-1">Official TikTok Login Kit & Secure Token Storage</div>
+                </div>
+                <div class="card-glass rounded-2xl p-5 border border-slate-800">
+                    <div class="text-cyan-400 font-bold text-2xl">9:16 Vertical</div>
+                    <div class="text-slate-400 text-sm mt-1">Automated Facecam & Action Safe-Zone Framing</div>
+                </div>
+                <div class="card-glass rounded-2xl p-5 border border-slate-800">
+                    <div class="text-cyan-400 font-bold text-2xl">Direct Post</div>
+                    <div class="text-slate-400 text-sm mt-1">TikTok Content Posting API Upload & Scheduling</div>
+                </div>
+                <div class="card-glass rounded-2xl p-5 border border-slate-800">
+                    <div class="text-cyan-400 font-bold text-2xl">100% Owned</div>
+                    <div class="text-slate-400 text-sm mt-1">Creators Retain Full Media Copyright & Control</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works" class="py-20 bg-slate-900/50 border-y border-slate-800/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto">
+                <h2 class="text-xs font-bold text-cyan-400 uppercase tracking-widest">End-to-End Workflow</h2>
+                <p class="mt-3 text-3xl sm:text-4xl font-extrabold text-white">How Summoner's Spells Works</p>
+                <p class="mt-4 text-slate-400 text-base">Simple 3-step pipeline built to automate short-form distribution without manual editing overhead.</p>
+            </div>
+
+            <div class="mt-16 grid md:grid-cols-3 gap-8">
+                <!-- Step 1 -->
+                <div class="card-glass rounded-2xl p-8 border border-slate-800 relative">
+                    <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xl mb-6">
+                        1
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Authorize Your Channels</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        Creators connect their verified TikTok or YouTube accounts using official OAuth 2.0 authorization flows. Tokens are securely encrypted and can be revoked at any time.
+                    </p>
+                    <ul class="mt-4 space-y-2 text-xs text-slate-300">
+                        <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i> TikTok Login Kit compliant</li>
+                        <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-cyan-400"></i> Scopes: video.publish & video.upload</li>
+                    </ul>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="card-glass rounded-2xl p-8 border border-slate-800 relative">
+                    <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-xl mb-6">
+                        2
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Automated Highlight Processing</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        Our engine ingests recorded gameplay, detects peak action moments, and renders high-definition vertical 1080x1920 clips with dynamic audio normalization and safe-zone overlay alignment.
+                    </p>
+                    <ul class="mt-4 space-y-2 text-xs text-slate-300">
+                        <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-indigo-400"></i> 60 FPS H.264 / AAC Encoding</li>
+                        <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-indigo-400"></i> Optimized for mobile full-screen view</li>
+                    </ul>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="card-glass rounded-2xl p-8 border border-slate-800 relative">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xl mb-6">
+                        3
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-2">Direct Publishing & Scheduling</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        Clips are automatically queued and published to your authorized TikTok creator profile via the TikTok Content Posting API with compliant titles, hashtags, and privacy settings.
+                    </p>
+                    <ul class="mt-4 space-y-2 text-xs text-slate-300">
+                        <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Rate-limit safe scheduling cadence</li>
+                        <li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i> Full publish confirmation telemetry</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Integration & API Features -->
+    <section id="integration" class="py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid lg:grid-cols-2 gap-12 items-center">
+                <div>
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-700 text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-4">
+                        Developer API Compliance
+                    </div>
+                    <h2 class="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
+                        Built on Official TikTok & YouTube Developer Standards
+                    </h2>
+                    <p class="mt-4 text-slate-400 text-base leading-relaxed">
+                        Summoner's Spells strictly adheres to the official TikTok for Developers guidelines, Terms of Service, and Community Guidelines. We never scrape or bypass official authentication layers.
+                    </p>
+
+                    <div class="mt-8 space-y-4">
+                        <div class="flex items-start gap-4 p-4 rounded-xl bg-slate-900 border border-slate-800">
+                            <div class="w-8 h-8 rounded-lg bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 shrink-0">
+                                <i data-lucide="video" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-white text-sm">TikTok Content Posting API v2</h4>
+                                <p class="text-slate-400 text-xs mt-1">Direct video initialization, chunked binary upload, and automated status polling for creator channels.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-4 p-4 rounded-xl bg-slate-900 border border-slate-800">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-white text-sm">Secure OAuth 2.0 PKCE</h4>
+                                <p class="text-slate-400 text-xs mt-1">State-verified authentication codes, automatic refresh token rotation, and zero credential exposure.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start gap-4 p-4 rounded-xl bg-slate-900 border border-slate-800">
+                            <div class="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
+                                <i data-lucide="youtube" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-white text-sm">YouTube Shorts Data API v3</h4>
+                                <p class="text-slate-400 text-xs mt-1">Direct upload and metadata assignment with compliant quota management.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Preview Card -->
+                <div class="card-glass rounded-2xl p-6 border border-slate-800 font-mono text-xs shadow-2xl">
+                    <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+                        <div class="flex items-center gap-2 text-slate-400">
+                            <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+                            <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+                            <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+                            <span class="ml-2 text-slate-400 font-sans text-xs">TikTok API Direct Post Flow</span>
+                        </div>
+                        <span class="text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-2 py-0.5 rounded text-[10px]">LIVE / READY</span>
+                    </div>
+
+                    <div class="space-y-3 text-slate-300">
+                        <p class="text-slate-500">// 1. Initiate Direct Post via Official TikTok API</p>
+                        <p class="text-cyan-400">POST https://open.tiktokapis.com/v2/post/publish/video/init/</p>
+                        <p class="text-slate-400 leading-relaxed bg-slate-950/70 p-3 rounded-lg border border-slate-800/80">
+{<br>
+&nbsp;&nbsp;"post_info": {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"title": "Insane Clutch Play! #Gaming #Shorts",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"privacy_level": "PUBLIC_TO_EVERYONE",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"disable_duet": false,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"disable_comment": false<br>
+&nbsp;&nbsp;},<br>
+&nbsp;&nbsp;"source_info": {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"source": "FILE_UPLOAD",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"video_size": 15420318<br>
+&nbsp;&nbsp;}<br>
+}
+                        </p>
+                        <p class="text-slate-500">// 2. Status verification response</p>
+                        <p class="text-emerald-400">Status 200 OK: publish_id = "v_pub_2910fa8c71"</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Security & Privacy Banner -->
+    <section id="security" class="py-16 bg-gradient-to-b from-slate-900 to-slate-950 border-t border-slate-800">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-6">
+                <i data-lucide="lock" class="w-7 h-7"></i>
+            </div>
+            <h2 class="text-3xl font-extrabold text-white">Security, Privacy & Creator Protection</h2>
+            <p class="mt-4 text-slate-400 text-sm max-w-2xl mx-auto leading-relaxed">
+                We believe in complete transparency. We only request permissions necessary to render and post clips on your explicit instructions.
+            </p>
+
+            <div class="mt-10 grid sm:grid-cols-3 gap-6 text-left">
+                <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <h4 class="font-bold text-white text-sm mb-1">Encrypted Credentials</h4>
+                    <p class="text-xs text-slate-400">All OAuth tokens are encrypted at rest with industry-standard cryptographic algorithms.</p>
+                </div>
+                <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <h4 class="font-bold text-white text-sm mb-1">Instant Access Revocation</h4>
+                    <p class="text-xs text-slate-400">Disconnect your TikTok or YouTube channel at any time with one click or via platform settings.</p>
+                </div>
+                <div class="p-5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <h4 class="font-bold text-white text-sm mb-1">No Data Resale</h4>
+                    <p class="text-xs text-slate-400">We do not sell, track, or share creator metadata with advertising brokers or unauthorized third parties.</p>
+                </div>
+            </div>
+
+            <div class="mt-8 flex flex-wrap items-center justify-center gap-4 text-sm font-semibold">
+                <a href="/terms.html" class="text-cyan-400 hover:underline">Read Terms of Service &rarr;</a>
+                <span class="text-slate-600">&bull;</span>
+                <a href="/privacy.html" class="text-cyan-400 hover:underline">Read Privacy Policy &rarr;</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-slate-800 py-12 text-slate-400 text-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <span class="font-bold text-white text-sm">Summoner's Spells</span>
+                        <p class="text-slate-500 text-[11px]">Automated Gaming Content Creation & Publishing Platform</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-6">
+                    <a href="/terms.html" class="hover:text-slate-200 transition-colors">Terms of Service</a>
+                    <a href="/privacy.html" class="hover:text-slate-200 transition-colors">Privacy Policy</a>
+                    <a href="mailto:support@summonersspells.app" class="hover:text-slate-200 transition-colors">Contact Support</a>
+                    <a href="/youtube/" class="text-cyan-400 hover:text-cyan-300 font-semibold">Creator Dashboard</a>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px]">
+                <p>&copy; 2026 Summoner's Spells. All rights reserved. TikTok is a trademark of ByteDance Ltd. YouTube is a trademark of Google LLC.</p>
+                <p>Host Domain: 34.154.195.185.nip.io &bull; SSL Secured</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
