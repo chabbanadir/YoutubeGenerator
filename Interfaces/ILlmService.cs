@@ -13,6 +13,7 @@ namespace YoutubeGenerator.Interfaces
             string kindKey,
             string subKindKey,
             string streamerName,
-            string? clipTitle = null);
+            string? clipTitle = null,
+            MontageProfile? profile = null);
     }
 }

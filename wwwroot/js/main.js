@@ -9,6 +9,9 @@ import {
   handleSaveRawJsonInline,
   formatRawJson,
   resetRawJson,
+  uploadShortImmediately,
+  uploadMontageImmediately,
+  triggerImmediateUploadAll,
   renderBagsOverviewGrid, 
   renderBagsSidebarList 
 } from './modules/bags.js';
@@ -191,6 +194,9 @@ window.openEditBagModal = () => openEditBagModal({ onOpenLoginModal: openLoginMo
 window.handleSaveRawJsonInline = () => handleSaveRawJsonInline({ onOverviewRefresh: fetchDashboardOverview });
 window.formatRawJson = formatRawJson;
 window.resetRawJson = resetRawJson;
+window.uploadShortImmediately = uploadShortImmediately;
+window.uploadMontageImmediately = uploadMontageImmediately;
+window.triggerImmediateUploadAll = triggerImmediateUploadAll;
 
 window.triggerMontage = triggerMontage;
 window.toggleRenderInspector = toggleRenderInspector;

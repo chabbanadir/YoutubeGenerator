@@ -511,7 +511,12 @@ function renderPublicationQueueItems() {
           </div>
         </td>
         <td style="text-align: right;">
-          <div class="queue-actions-cell">
+          <div class="queue-actions-cell" style="display: flex; gap: 0.35rem; justify-content: flex-end; align-items: center;">
+            ${!item.isUploadedYt && state.isAuthenticatedUser && item.id ? `
+              <button type="button" class="btn btn-sm" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 0.2rem 0.45rem; font-size: 0.68rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; cursor: pointer;" onclick="${isShort ? `window.uploadShortImmediately('${escapeJsString(item.id)}')` : `window.uploadMontageImmediately('${escapeJsString(item.id)}')`}" title="Upload to YouTube immediately">
+                <i data-lucide="zap" style="width: 11px; height: 11px;"></i> Now
+              </button>
+            ` : ''}
             ${item.youtubeUrl ? `
               <a href="${escapeHtml(item.youtubeUrl)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.45rem; font-size: 0.68rem; text-decoration: none;" title="Watch Video">
                 <i data-lucide="external-link" style="width: 11px; height: 11px;"></i>

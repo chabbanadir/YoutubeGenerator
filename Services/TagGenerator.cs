@@ -6,13 +6,35 @@ namespace YoutubeGenerator.Services
 {
     public static class TagGenerator
     {
-        public static List<string> GenerateTags(string kindKey, string subKindKey, IEnumerable<string?>? streamers)
+        public static List<string> GenerateTags(
+            string kindKey,
+            string subKindKey,
+            IEnumerable<string?>? streamers,
+            string? category = null,
+            IEnumerable<string>? customDefaultTags = null)
         {
             var tags = new List<string>();
             var kind = (kindKey ?? "").ToLower().Trim();
             var subKind = (subKindKey ?? "").ToLower().Trim();
 
-            if (kind == "lol")
+            // Determine effective category
+            var cat = (category ?? "").ToLower().Trim();
+            if (string.IsNullOrWhiteSpace(cat) || cat == "gaming")
+            {
+                if (kind.Contains("val")) cat = "valorant";
+                else if (kind == "lol" || kind.Contains("league")) cat = "lol";
+                else if (kind.Contains("chat") || kind.Contains("irl")) cat = "just_chatting";
+                else if (kind.Contains("meme") || kind.Contains("humor")) cat = "meme";
+                else cat = "gaming";
+            }
+
+            // Priority 1: User's custom default tags from channel/subkind profile
+            if (customDefaultTags != null)
+            {
+                tags.AddRange(customDefaultTags.Where(t => !string.IsNullOrWhiteSpace(t)));
+            }
+
+            if (cat == "lol")
             {
                 tags.AddRange(new[]
                 {
@@ -53,7 +75,7 @@ namespace YoutubeGenerator.Services
                     tags.Add("LoL Tournament");
                 }
             }
-            else if (kind == "valorant")
+            else if (cat == "valorant")
             {
                 tags.AddRange(new[]
                 {
@@ -83,6 +105,44 @@ namespace YoutubeGenerator.Services
                     tags.Add("Pro Valorant");
                 }
             }
+            else if (cat == "just_chatting")
+            {
+                tags.AddRange(new[]
+                {
+                    "Just Chatting",
+                    "Twitch Highlights",
+                    "Twitch Clips",
+                    "Streamer Moments",
+                    "Funniest Twitch Moments",
+                    "IRL Clips",
+                    "Twitch Drama",
+                    "Streamer Reactions",
+                    "Best Twitch Clips",
+                    "Just Chatting Clips",
+                    "Twitch Compilation",
+                    "Livestream Highlights",
+                    "Twitch"
+                });
+            }
+            else if (cat == "meme")
+            {
+                tags.AddRange(new[]
+                {
+                    "Memes",
+                    "Dank Memes",
+                    "Meme Compilation",
+                    "Try Not To Laugh",
+                    "Funny Clips",
+                    "Viral Memes",
+                    "Internet Memes",
+                    "Humor",
+                    "Funny Moments",
+                    "Clean Memes",
+                    "Best Memes",
+                    "Meme Review",
+                    "Trending Memes"
+                });
+            }
             else
             {
                 tags.Add("Gaming");
@@ -101,21 +161,85 @@ namespace YoutubeGenerator.Services
                     if (clean.Length > 2)
                     {
                         tags.Add(clean);
-                        if (kind == "lol")
+                        if (cat == "lol")
                             tags.Add($"{clean} LoL");
-                        else if (kind == "valorant")
+                        else if (cat == "valorant")
                             tags.Add($"{clean} Valorant");
+                        else if (cat == "just_chatting")
+                            tags.Add($"{clean} Twitch");
                     }
                 }
             }
 
+            return EnforceTagLimits(tags);
+        }
+
+        public static List<string> GenerateShortTags(
+            string kindKey,
+            string? category,
+            string streamerName,
+            IEnumerable<string>? customDefaultTags = null)
+        {
+            var tags = new List<string> { "Shorts", "YouTube Shorts" };
+            var cat = (category ?? "").ToLower().Trim();
+            var kind = (kindKey ?? "").ToLower().Trim();
+
+            if (string.IsNullOrWhiteSpace(cat) || cat == "gaming")
+            {
+                if (kind.Contains("val")) cat = "valorant";
+                else if (kind == "lol" || kind.Contains("league")) cat = "lol";
+                else if (kind.Contains("chat") || kind.Contains("irl")) cat = "just_chatting";
+                else if (kind.Contains("meme") || kind.Contains("humor")) cat = "meme";
+                else cat = "gaming";
+            }
+
+            if (customDefaultTags != null)
+            {
+                tags.AddRange(customDefaultTags.Where(t => !string.IsNullOrWhiteSpace(t)));
+            }
+
+            var cleanStreamer = (streamerName ?? "").Trim().TrimStart('@');
+            if (cleanStreamer.Length > 2)
+            {
+                tags.Add(cleanStreamer);
+            }
+
+            if (cat == "lol")
+            {
+                tags.AddRange(new[] { "LoL Shorts", "League of Legends", "LoL Clips", "League Highlights", "Outplay" });
+                if (cleanStreamer.Length > 2) tags.Add($"{cleanStreamer} LoL");
+            }
+            else if (cat == "valorant")
+            {
+                tags.AddRange(new[] { "VALORANT Shorts", "VALORANT", "Valorant Clips", "Valorant Highlights", "Radiant" });
+                if (cleanStreamer.Length > 2) tags.Add($"{cleanStreamer} Valorant");
+            }
+            else if (cat == "just_chatting")
+            {
+                tags.AddRange(new[] { "Just Chatting", "Twitch Clips", "Twitch Highlights", "Streamer Moments", "IRL", "Funniest Moments" });
+                if (cleanStreamer.Length > 2) tags.Add($"{cleanStreamer} Twitch");
+            }
+            else if (cat == "meme")
+            {
+                tags.AddRange(new[] { "Memes", "Dank Memes", "Funny Shorts", "Try Not To Laugh", "Viral", "Meme Compilation" });
+            }
+            else
+            {
+                tags.AddRange(new[] { $"{kind} Shorts", "Gaming Shorts", "Gaming Clips", "Highlights" });
+            }
+
+            return EnforceTagLimits(tags);
+        }
+
+        private static List<string> EnforceTagLimits(IEnumerable<string> rawTags)
+        {
             // Enforce YouTube tag limits:
             // YouTube maximum limit across all tags combined is 500 characters.
             // Truncate safely at 450 characters.
             var finalTags = new List<string>();
             int totalChars = 0;
 
-            foreach (var tag in tags.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var tag in rawTags.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (totalChars + tag.Length + 1 <= 450)
                 {

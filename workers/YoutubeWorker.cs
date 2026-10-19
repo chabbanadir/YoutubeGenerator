@@ -67,7 +67,7 @@ namespace YoutubeGenerator.workers
             return path;
         }
 
-        public async Task RunAsync()
+        public async Task RunAsync(string? targetMontageId = null, bool forceImmediate = false)
         {
             var bag = JsonFileService.Load<List<MontageItem>>(_bagYoutube);
             var bagDone = JsonFileService.Load<List<MontageItem>>(_bagYoutubeDone);
@@ -105,11 +105,15 @@ namespace YoutubeGenerator.workers
                 return;
 
             // -----------------------------------------------------
-            // 1️⃣ METADATA GENERATION
+            // 1️⃣ METADATA GENERATION & UPLOAD
             // -----------------------------------------------------
-            //var metaItem = bag.FirstOrDefault(x => x.Completed == false);
+            var itemsToProcess = bag.Where(x => x.Completed == false);
+            if (!string.IsNullOrWhiteSpace(targetMontageId))
+            {
+                itemsToProcess = itemsToProcess.Where(x => x.MontageId == targetMontageId);
+            }
 
-            foreach(var metaItem in bag.Where(x => x.Completed == false).ToList()) { 
+            foreach(var metaItem in itemsToProcess.ToList()) { 
                 if (metaItem != null)
                 {
                     try
@@ -154,14 +158,27 @@ namespace YoutubeGenerator.workers
                         JsonFileService.Save(_bagYoutube, bag);
 
                         // compute schedule time
-                        DateTime publishTime = creds.UploadConfig.LastUploadTime.AddHours(creds.UploadConfig.MinDelayHours);
-                        if (publishTime <= DateTime.UtcNow)
+                        DateTime publishTime;
+                        if (forceImmediate)
                         {
-                            publishTime = DateTime.UtcNow.AddMinutes(15);
+                            publishTime = DateTime.UtcNow.AddMinutes(2);
+                            _logger.LogInformation($"⚡ [YoutubeWorker] Force immediate upload requested for montage {metaItem.MontageId} — scheduled at {publishTime:HH:mm:ss} UTC");
+                        }
+                        else
+                        {
+                            double delayHours = creds.UploadConfig.LongVideoCadenceHours > 0
+                                ? creds.UploadConfig.LongVideoCadenceHours
+                                : (creds.UploadConfig.MinDelayHours > 0 ? creds.UploadConfig.MinDelayHours : 8.0);
+
+                            publishTime = creds.UploadConfig.LastUploadTime.AddHours(delayHours);
+                            if (publishTime <= DateTime.UtcNow)
+                            {
+                                publishTime = DateTime.UtcNow.AddMinutes(15);
+                            }
                         }
 
                         _logger.LogInformation(
-                            $"📤 Uploading montage {metaItem.MontageId}  start — publish at {publishTime}");
+                            $"📤 Uploading montage {metaItem.MontageId} start — publish at {publishTime}");
 
                         // 2️⃣ THUMBNAIL GENERATION (High-CTR 3-Point Visual Engine)
                         string? thumbPath = null;

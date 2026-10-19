@@ -211,6 +211,62 @@ namespace YoutubeGenerator.Controllers
             });
         }
 
+        [HttpPost("shorts/{shortId}/upload-now")]
+        public async Task<IActionResult> ForceUploadShortNow(
+            [FromRoute] string shortId,
+            [FromServices] IShortsSchedulerService shortsScheduler)
+        {
+            if (string.IsNullOrWhiteSpace(shortId))
+                return BadRequest(new { success = false, message = "Short ID is required." });
+
+            bool success = await shortsScheduler.ForceUploadShortImmediatelyAsync(shortId);
+            if (success)
+            {
+                return Ok(new { success = true, message = $"Short '{shortId}' uploaded successfully." });
+            }
+            return StatusCode(500, new { success = false, message = $"Failed to upload short '{shortId}'. Check worker logs or quota status." });
+        }
+
+        [HttpPost("montages/{montageId}/upload-now")]
+        public IActionResult ForceUploadMontageNow(
+            [FromRoute] string montageId,
+            [FromServices] IServiceScopeFactory scopeFactory)
+        {
+            if (string.IsNullOrWhiteSpace(montageId))
+                return BadRequest(new { success = false, message = "Montage ID is required." });
+
+            _ = Task.Run(async () =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var youtubeWorker = scope.ServiceProvider.GetRequiredService<YoutubeGenerator.workers.YoutubeWorker>();
+                await youtubeWorker.RunAsync(montageId, forceImmediate: true);
+            });
+
+            return Ok(new { success = true, message = $"Immediate upload triggered for montage '{montageId}'." });
+        }
+
+        [HttpPost("trigger-immediate-upload")]
+        public async Task<IActionResult> TriggerImmediateUpload(
+            [FromServices] IServiceScopeFactory scopeFactory,
+            [FromServices] IShortsSchedulerService shortsScheduler)
+        {
+            bool shortUploaded = await shortsScheduler.ProcessNextScheduledShortAsync(forceImmediate: true);
+
+            _ = Task.Run(async () =>
+            {
+                using var scope = scopeFactory.CreateScope();
+                var youtubeWorker = scope.ServiceProvider.GetRequiredService<YoutubeGenerator.workers.YoutubeWorker>();
+                await youtubeWorker.RunAsync(forceImmediate: true);
+            });
+
+            return Ok(new
+            {
+                success = true,
+                message = "Immediate upload triggered for pending queues.",
+                shortUploaded
+            });
+        }
+
         // ============================================================================
         // 2. BAGS LIST
         // ============================================================================

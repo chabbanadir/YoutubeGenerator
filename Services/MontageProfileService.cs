@@ -87,10 +87,47 @@ namespace YoutubeGenerator.Services
                     _logger.LogError(ex, $"🚨 Failed to persist auto-created profile to {file}");
                 }
 
+                EnrichProfileFromKind(newProfile, safeKind);
                 return newProfile;
             }
 
-            return JsonFileService.Load<MontageProfile>(file);
+            var profile = JsonFileService.Load<MontageProfile>(file);
+            EnrichProfileFromKind(profile, safeKind);
+            return profile;
+        }
+
+        private void EnrichProfileFromKind(MontageProfile profile, string kindKey)
+        {
+            try
+            {
+                var kindCreds = GetYoutubeCredentials(kindKey);
+                if (kindCreds != null)
+                {
+                    if (string.IsNullOrWhiteSpace(profile.Category) || profile.Category == "gaming")
+                    {
+                        if (!string.IsNullOrWhiteSpace(kindCreds.Category))
+                            profile.Category = kindCreds.Category;
+                    }
+                    if (string.IsNullOrWhiteSpace(profile.PromptHint))
+                        profile.PromptHint = kindCreds.PromptHint;
+                    if (profile.DefaultTags == null || !profile.DefaultTags.Any())
+                        profile.DefaultTags = kindCreds.DefaultTags;
+                    if (profile.CustomHashtags == null || !profile.CustomHashtags.Any())
+                        profile.CustomHashtags = kindCreds.CustomHashtags;
+                }
+            }
+            catch { }
+
+            // Final fallback category detection if still empty or generic
+            if (string.IsNullOrWhiteSpace(profile.Category) || profile.Category == "gaming")
+            {
+                var lower = (kindKey ?? "").ToLowerInvariant();
+                if (lower.Contains("val")) profile.Category = "valorant";
+                else if (lower == "lol" || lower.Contains("league")) profile.Category = "lol";
+                else if (lower.Contains("chat") || lower.Contains("irl")) profile.Category = "just_chatting";
+                else if (lower.Contains("meme") || lower.Contains("humor")) profile.Category = "meme";
+                else profile.Category = "gaming";
+            }
         }
 
         public MontageProfile EnsureProfileExists(string kindKey, string subKindKey)
@@ -119,7 +156,7 @@ namespace YoutubeGenerator.Services
                         file = valFile;
                     }
                 }
-                else
+                else if (safeKey == "lol" || safeKey.Contains("league"))
                 {
                     var lolFile = Path.Combine(_kindsDir, "lol.json");
                     if (File.Exists(lolFile))
@@ -133,6 +170,15 @@ namespace YoutubeGenerator.Services
                 throw new Exception($"Missing YouTube credentials for {kindKey}");
 
             var creds = JsonFileService.Load<YoutubeCredentials>(file);
+
+            if (string.IsNullOrWhiteSpace(creds.Category) || creds.Category == "gaming")
+            {
+                var lower = safeKey.ToLowerInvariant();
+                if (lower.Contains("val")) creds.Category = "valorant";
+                else if (lower == "lol" || lower.Contains("league")) creds.Category = "lol";
+                else if (lower.Contains("chat") || lower.Contains("irl")) creds.Category = "just_chatting";
+                else if (lower.Contains("meme") || lower.Contains("humor")) creds.Category = "meme";
+            }
 
             if (string.IsNullOrWhiteSpace(creds.YoutubeClientId))
             {

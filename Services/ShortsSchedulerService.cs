@@ -104,15 +104,20 @@ namespace YoutubeGenerator.Services
             var subKind = (clip.SubKindKey ?? "normal").Trim().ToLowerInvariant();
             var streamer = (clip.Description ?? "Streamer").Trim().TrimStart('@');
 
+            // Fetch channel & subkind profile for dynamic Category, PromptHint, and Cadence
+            var profile = _profileService.GetProfile(kind, subKind);
+
             // Generate viral Short title, description, and tags via LLM
             _renderTracker?.UpdateShortProgress(85, "AI Metadata (LLM)");
-            _renderTracker?.AddLog("ai", $"🤖 Prompting LLM for Short metadata: @{streamer} ({subKind})");
-            _logger.LogInformation($"🤖 Generating AI metadata via LLM for Short ({kind}/{subKind}, Streamer: @{streamer})");
-            var meta = await _llmService.GenerateShortMetadataAsync(kind, subKind, streamer, $"{subKind} highlight by @{streamer}");
+            _renderTracker?.AddLog("ai", $"🤖 Prompting LLM for Short metadata: @{streamer} ({subKind}, Category: {profile.Category})");
+            _logger.LogInformation($"🤖 Generating AI metadata via LLM for Short ({kind}/{subKind}, Category: {profile.Category}, Streamer: @{streamer})");
+            var meta = await _llmService.GenerateShortMetadataAsync(kind, subKind, streamer, $"{subKind} highlight by @{streamer}", profile);
 
             string title = meta.Title;
             string description = meta.Description;
-            var tags = meta.Tags ?? new List<string> { "Shorts", "YouTube Shorts", $"{kind} Shorts", streamer, "Gaming" };
+            var tags = (meta.Tags != null && meta.Tags.Any())
+                ? meta.Tags
+                : TagGenerator.GenerateShortTags(kind, profile.Category, streamer, profile.DefaultTags);
             _renderTracker?.AddLog("ai", $"✨ AI Title: \"{title}\"");
 
             // Ensure 9:16 Short thumbnail exists
@@ -136,7 +141,23 @@ namespace YoutubeGenerator.Services
             {
                 var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
 
-                // Calculate 3-hour rolling cadence per game channel to respect YouTube limits and maximize algorithmic performance
+                // Fetch dynamic cadence settings from kind upload configuration
+                double cadenceMinutes = 60.0;
+                int startHour = 8;
+                int endHour = 23;
+                try
+                {
+                    var creds = _profileService.GetYoutubeCredentials(kind);
+                    if (creds?.UploadConfig != null)
+                    {
+                        if (creds.UploadConfig.ShortsCadenceMinutes > 0)
+                            cadenceMinutes = creds.UploadConfig.ShortsCadenceMinutes;
+                        startHour = creds.UploadConfig.ActiveHoursStartUtc ?? 8;
+                        endHour = creds.UploadConfig.ActiveHoursEndUtc ?? 23;
+                    }
+                }
+                catch { }
+
                 DateTime nextSlot;
                 var latestPending = bag
                     .Where(s => !s.IsUploaded && s.KindKey == kind)
@@ -145,11 +166,25 @@ namespace YoutubeGenerator.Services
 
                 if (latestPending != null && latestPending.ScheduledPublishTime > DateTime.UtcNow)
                 {
-                    nextSlot = latestPending.ScheduledPublishTime.AddHours(1);
+                    nextSlot = latestPending.ScheduledPublishTime.AddMinutes(cadenceMinutes);
                 }
                 else
                 {
                     nextSlot = DateTime.UtcNow.AddMinutes(5);
+                }
+
+                // Adjust to active hours window if applicable
+                if (endHour > startHour)
+                {
+                    if (nextSlot.Hour < startHour)
+                    {
+                        nextSlot = new DateTime(nextSlot.Year, nextSlot.Month, nextSlot.Day, startHour, 0, 0, DateTimeKind.Utc);
+                    }
+                    else if (nextSlot.Hour >= endHour)
+                    {
+                        var nextDay = nextSlot.Date.AddDays(1);
+                        nextSlot = new DateTime(nextDay.Year, nextDay.Month, nextDay.Day, startHour, 0, 0, DateTimeKind.Utc);
+                    }
                 }
 
                 var item = new ShortItem
@@ -171,13 +206,41 @@ namespace YoutubeGenerator.Services
                 JsonFileService.Save(_bagShorts, bag);
 
                 _renderTracker?.CompleteShortProgress($"Short '{title}' queued for {nextSlot:HH:mm:ss} UTC");
-                _renderTracker?.AddLog("shorts", $"📅 Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (+1h cadence)");
-                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +1h cadence for {kind})");
+                _renderTracker?.AddLog("shorts", $"📅 Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (+{cadenceMinutes}m cadence)");
+                _logger.LogInformation($"[ShortsScheduler] Queued Short '{title}' scheduled for {nextSlot:HH:mm:ss} UTC (Slot: +{cadenceMinutes}m cadence for {kind})");
                 return item;
             }
         }
 
-        public async Task<bool> ProcessNextScheduledShortAsync()
+        public async Task<bool> ForceUploadShortImmediatelyAsync(string shortId)
+        {
+            if (string.IsNullOrWhiteSpace(shortId)) return false;
+
+            ShortItem? target = null;
+            lock (_fileLock)
+            {
+                var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
+                target = bag.FirstOrDefault(s => s.ShortId == shortId && !s.IsUploaded);
+                if (target != null)
+                {
+                    target.ScheduledPublishTime = DateTime.UtcNow.AddMinutes(1);
+                    JsonFileService.Save(_bagShorts, bag);
+                }
+            }
+
+            if (target == null)
+            {
+                _logger.LogWarning($"[ShortsScheduler] Force upload requested for unknown or already uploaded short '{shortId}'.");
+                return false;
+            }
+
+            _logger.LogInformation($"⚡ [ShortsScheduler] Forcing immediate upload of Short '{target.Title}' (ID: {shortId})...");
+            _renderTracker?.AddLog("shorts", $"⚡ Immediate upload triggered for Short '{target.Title}'");
+
+            return await UploadSingleShortAsync(target);
+        }
+
+        public async Task<bool> ProcessNextScheduledShortAsync(bool forceImmediate = false)
         {
             ShortItem? nextShort = null;
 
@@ -191,7 +254,6 @@ namespace YoutubeGenerator.Services
                     .ToList();
 
                 // Find the first eligible short whose channel is clear (not held by quota or pacing)
-                // This ensures Channel A (e.g. LoL on cooldown) never blocks Channel B (e.g. Valorant ready)
                 foreach (var candidate in candidates)
                 {
                     if (_quotaService.CanUploadShort(candidate.KindKey, out _))
@@ -201,29 +263,25 @@ namespace YoutubeGenerator.Services
                     }
                 }
 
-                // If the selected short has a stale ScheduledPublishTime (in the past),
-                // reschedule it to a valid future time. YouTube rejects PublishAt in the past.
-                // This handles shorts that were rate-limited yesterday and need to be retried today.
-                if (nextShort != null && nextShort.ScheduledPublishTime < DateTime.UtcNow)
+                if (nextShort != null && (forceImmediate || nextShort.ScheduledPublishTime < DateTime.UtcNow))
                 {
-                    var latestPendingForKind = bag
-                        .Where(s => !s.IsUploaded && s.KindKey == nextShort.KindKey && s.ShortId != nextShort.ShortId)
-                        .OrderByDescending(s => s.ScheduledPublishTime)
-                        .FirstOrDefault();
+                    DateTime newSlot = forceImmediate ? DateTime.UtcNow.AddMinutes(1) : DateTime.UtcNow.AddMinutes(5);
 
-                    DateTime newSlot;
-                    if (latestPendingForKind != null && latestPendingForKind.ScheduledPublishTime > DateTime.UtcNow)
+                    if (!forceImmediate)
                     {
-                        newSlot = latestPendingForKind.ScheduledPublishTime.AddHours(1);
-                    }
-                    else
-                    {
-                        newSlot = DateTime.UtcNow.AddMinutes(5);
+                        var latestPendingForKind = bag
+                            .Where(s => !s.IsUploaded && s.KindKey == nextShort.KindKey && s.ShortId != nextShort.ShortId)
+                            .OrderByDescending(s => s.ScheduledPublishTime)
+                            .FirstOrDefault();
+
+                        if (latestPendingForKind != null && latestPendingForKind.ScheduledPublishTime > DateTime.UtcNow)
+                        {
+                            newSlot = latestPendingForKind.ScheduledPublishTime.AddMinutes(60);
+                        }
                     }
 
                     nextShort.ScheduledPublishTime = newSlot;
 
-                    // Persist the rescheduled time so it survives restarts
                     var match = bag.FirstOrDefault(s => s.ShortId == nextShort.ShortId);
                     if (match != null)
                     {
@@ -235,6 +293,12 @@ namespace YoutubeGenerator.Services
 
             if (nextShort == null)
                 return false;
+
+            return await UploadSingleShortAsync(nextShort);
+        }
+
+        private async Task<bool> UploadSingleShortAsync(ShortItem nextShort)
+        {
 
             // YouTube Quota & Long Video Balance Gatekeeper (double check)
             if (!_quotaService.CanUploadShort(nextShort.KindKey, out string quotaReason))

@@ -423,8 +423,56 @@ namespace YoutubeGenerator.Services
         {
             int seed = Math.Abs((streamer + subKind).GetHashCode());
 
-            // 1. League of Legends
-            if (!kind.Contains("val"))
+            // Resolve effective Category
+            string category = "gaming";
+            if (kind.Contains("val")) category = "valorant";
+            else if (kind == "lol" || kind.Contains("league")) category = "lol";
+            else if (kind.Contains("chat") || kind.Contains("irl")) category = "just_chatting";
+            else if (kind.Contains("meme") || kind.Contains("humor")) category = "meme";
+
+            // 1. Just Chatting / IRL
+            if (category == "just_chatting")
+            {
+                string[] chattingHooks = new[]
+                {
+                    "WAIT FOR IT... 💀",
+                    "NO WAY HE SAID THAT 💀",
+                    "CAN'T STOP LAUGHING 😂",
+                    "UNREAL MOMENT 😭",
+                    "CAUGHT IN 4K 💀",
+                    "BEST REACTION 🔥",
+                    "OUT OF POCKET 😭"
+                };
+                string hook = chattingHooks[seed % chattingHooks.Length];
+
+                string creatorAvatar = Path.Combine(creatorsDir, $"{streamer.ToLowerInvariant()}.png");
+                string? badge = File.Exists(creatorAvatar) ? creatorAvatar : null;
+
+                return new ShortVisualTheme(badge, hook, "0x00F5D4", 170, 205, 105, 440);
+            }
+
+            // 2. Memes & Humor
+            if (category == "meme")
+            {
+                string[] memeHooks = new[]
+                {
+                    "BRO REALLY THOUGHT 💀",
+                    "WAIT TILL THE END 😭",
+                    "NAH THIS IS CRAZY 💀",
+                    "TRY NOT TO LAUGH 😂",
+                    "TOP TIER MEME 🔥",
+                    "CAN'T BE REAL 😭"
+                };
+                string hook = memeHooks[seed % memeHooks.Length];
+
+                string creatorAvatar = Path.Combine(creatorsDir, $"{streamer.ToLowerInvariant()}.png");
+                string? badge = File.Exists(creatorAvatar) ? creatorAvatar : null;
+
+                return new ShortVisualTheme(badge, hook, "0xFFD166", 170, 205, 105, 440);
+            }
+
+            // 3. League of Legends
+            if (category == "lol")
             {
                 if (subKind.Contains("penta"))
                 {
@@ -432,7 +480,6 @@ namespace YoutubeGenerator.Services
                     string pentaRed = Path.Combine(badgesDir, "pentakill_crest_red.png");
                     string pentaBlue = Path.Combine(badgesDir, "pentakill_crest_blue.png");
 
-                    // Alternate between full pentakill banner and red/blue crests
                     if (seed % 3 == 0 && File.Exists(pentaRed))
                     {
                         string hook = (seed % 2 == 0) ? "INSANE PENTAKILL" : "PENTAKILL?!";
@@ -449,7 +496,6 @@ namespace YoutubeGenerator.Services
                     }
                 }
 
-                // Check fails
                 if (subKind.Contains("fail"))
                 {
                     string[] failHooks = new[] { "WHAT WAS THAT?!", "BRUH MOMENT 💀", "CAN'T BE REAL 😭", "UNLUCKY PLAY" };
@@ -459,7 +505,6 @@ namespace YoutubeGenerator.Services
                     return new ShortVisualTheme(File.Exists(badge) ? badge : null, hook, "0xFFCC00", 170, 200, 105, 450);
                 }
 
-                // Normal / Highlights / Outplays
                 string[] outplayHooks = new[]
                 {
                     "INSANE OUTPLAY",
@@ -472,14 +517,12 @@ namespace YoutubeGenerator.Services
                 };
                 string chosenHook = outplayHooks[seed % outplayHooks.Length];
 
-                // Check creator avatar first
                 string creatorAvatar = Path.Combine(creatorsDir, $"{streamer.ToLowerInvariant()}.png");
                 if (File.Exists(creatorAvatar))
                 {
                     return new ShortVisualTheme(creatorAvatar, chosenHook, "0xF5C242", 170, 205, 105, 440);
                 }
 
-                // Challenger crest or blue crest rotation
                 string chalCrest = Path.Combine(badgesDir, "challenger_crest.png");
                 string chalIcon = Path.Combine(badgesDir, "challenger_icon.png");
                 string blueCrest = Path.Combine(badgesDir, "pentakill_crest_blue.png");
@@ -493,37 +536,47 @@ namespace YoutubeGenerator.Services
                 return new ShortVisualTheme(chosenBadge, chosenHook, "0xF5C242", 170, 200, 105, 450);
             }
 
-            // 2. Valorant
-            if (subKind.Contains("ace"))
+            // 4. Valorant
+            if (category == "valorant")
             {
-                string[] aceBadges = new[]
+                if (subKind.Contains("ace"))
                 {
-                    Path.Combine(badgesDir, "ace_skull.png"),
-                    Path.Combine(badgesDir, "ace.png"),
-                    Path.Combine(badgesDir, "ace_symbol_1.png")
-                };
-                var existingAce = aceBadges.Where(File.Exists).ToList();
-                string? selected = existingAce.Count > 0 ? existingAce[seed % existingAce.Count] : null;
+                    string[] aceBadges = new[]
+                    {
+                        Path.Combine(badgesDir, "ace_skull.png"),
+                        Path.Combine(badgesDir, "ace.png"),
+                        Path.Combine(badgesDir, "ace_symbol_1.png")
+                    };
+                    var existingAce = aceBadges.Where(File.Exists).ToList();
+                    string? selected = existingAce.Count > 0 ? existingAce[seed % existingAce.Count] : null;
 
-                if (selected != null && selected.EndsWith("ace.png"))
-                {
-                    return new ShortVisualTheme(selected, null, "0x00F5D4", 160, 180, 0, 390);
+                    if (selected != null && selected.EndsWith("ace.png"))
+                    {
+                        return new ShortVisualTheme(selected, null, "0x00F5D4", 160, 180, 0, 390);
+                    }
+
+                    string[] aceHooks = new[] { "1v5 ACE?!", "INSANE ACE", "CLEAN 1v5" };
+                    return new ShortVisualTheme(selected, aceHooks[seed % aceHooks.Length], "0x00F5D4", 180, 205, 105, 440);
                 }
+                else
+                {
+                    string[] valHooks = new[] { "RADIANT PLAY", "CLEAN HEADSHOTS", "UNREAL AIM", "1000 IQ CLUTCH", "PEAK RADIANT" };
+                    string chosenHook = valHooks[seed % valHooks.Length];
 
-                string[] aceHooks = new[] { "1v5 ACE?!", "INSANE ACE", "CLEAN 1v5" };
-                return new ShortVisualTheme(selected, aceHooks[seed % aceHooks.Length], "0x00F5D4", 180, 205, 105, 440);
+                    string radCrest = Path.Combine(badgesDir, "radiant_crest.png");
+                    string radBadge = Path.Combine(badgesDir, "radiant_badge.png");
+                    string? selected = File.Exists(radCrest) ? radCrest : (File.Exists(radBadge) ? radBadge : null);
+
+                    return new ShortVisualTheme(selected, chosenHook, "0x00F5D4", 180, 205, 105, 440);
+                }
             }
-            else
-            {
-                string[] valHooks = new[] { "RADIANT PLAY", "CLEAN HEADSHOTS", "UNREAL AIM", "1000 IQ CLUTCH", "PEAK RADIANT" };
-                string chosenHook = valHooks[seed % valHooks.Length];
 
-                string radCrest = Path.Combine(badgesDir, "radiant_crest.png");
-                string radBadge = Path.Combine(badgesDir, "radiant_badge.png");
-                string? selected = File.Exists(radCrest) ? radCrest : (File.Exists(radBadge) ? radBadge : null);
-
-                return new ShortVisualTheme(selected, chosenHook, "0x00F5D4", 180, 205, 105, 440);
-            }
+            // 5. General Gaming
+            string[] genericHooks = new[] { "INSANE PLAY", "CLUTCH MOMENT", "1000 IQ PLAY", "PURE INSANITY", "EPIC HIGHLIGHT" };
+            string genericHook = genericHooks[seed % genericHooks.Length];
+            string genAvatar = Path.Combine(creatorsDir, $"{streamer.ToLowerInvariant()}.png");
+            string? genBadge = File.Exists(genAvatar) ? genAvatar : null;
+            return new ShortVisualTheme(genBadge, genericHook, "0x38BDF8", 170, 205, 105, 440);
         }
 
         public class WebcamCoordinates

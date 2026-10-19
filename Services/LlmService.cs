@@ -43,7 +43,7 @@ namespace YoutubeGenerator.Services
                 .ToList();
 
             var subKindKey = !string.IsNullOrWhiteSpace(package?.SubKindKey) ? package!.SubKindKey : profile.SubKindKey;
-            result.Tags = TagGenerator.GenerateTags(profile.KindKey, subKindKey, streamers);
+            result.Tags = TagGenerator.GenerateTags(profile.KindKey, subKindKey, streamers, profile.Category, profile.DefaultTags);
 
             if (package?.Clips == null || !package.Clips.Any())
             {
@@ -59,7 +59,7 @@ namespace YoutubeGenerator.Services
 
                 var prompt = BuildComprehensivePrompt(package, profile);
 
-                var rawResponse = await ExecuteLlmRequestWithFallbackAsync(prompt);
+                var rawResponse = await ExecuteLlmRequestWithFallbackAsync(prompt, profile.Category);
                 var jsonText = ExtractJson(rawResponse);
 
                 var metadata = JsonSerializer.Deserialize<MetadataResponse>(jsonText, _jsonOptions);
@@ -99,50 +99,139 @@ namespace YoutubeGenerator.Services
             string kindKey,
             string subKindKey,
             string streamerName,
-            string? clipTitle = null)
+            string? clipTitle = null,
+            MontageProfile? profile = null)
         {
             var result = new MontageLLMResult();
             var cleanStreamer = (streamerName ?? "Streamer").Trim().TrimStart('@');
-            var isVal = (kindKey ?? "").ToLower().Contains("val");
-            var gameName = isVal ? "VALORANT" : "League of Legends";
-            var gameHashtag = isVal ? "VALORANT" : "LoL";
+            var cleanKind = (kindKey ?? "").ToLowerInvariant().Trim();
+
+            // Resolve effective Category
+            var category = (profile?.Category ?? "").ToLowerInvariant().Trim();
+            if (string.IsNullOrWhiteSpace(category) || category == "gaming")
+            {
+                if (cleanKind.Contains("val")) category = "valorant";
+                else if (cleanKind == "lol" || cleanKind.Contains("league")) category = "lol";
+                else if (cleanKind.Contains("chat") || cleanKind.Contains("irl")) category = "just_chatting";
+                else if (cleanKind.Contains("meme") || cleanKind.Contains("humor")) category = "meme";
+                else category = "gaming";
+            }
+
+            var promptHint = !string.IsNullOrWhiteSpace(profile?.PromptHint) ? profile.PromptHint.Trim() : null;
+
+            // Determine Niche configuration
+            string nicheDescription;
+            string primaryHashtag;
+            string secondaryHashtags;
+            string callToAction;
+            string exampleTitles;
+            string fallbackTitle;
+            string fallbackDescription;
+
+            switch (category)
+            {
+                case "just_chatting":
+                    nicheDescription = "Twitch Just Chatting highlights, funny streamer banter, dramatic reactions, and viral stream moments";
+                    primaryHashtag = "#JustChatting";
+                    secondaryHashtags = "#Shorts #JustChatting #TwitchClips #StreamerMoments #Funny";
+                    callToAction = "Subscribe for daily Twitch Just Chatting highlights!";
+                    exampleTitles = $"'BRO REALLY SAID THAT 💀 @{cleanStreamer} #Shorts #JustChatting' or 'HE DIDN'T KNOW THE MIC WAS ON 😭 @{cleanStreamer} #Shorts #JustChatting'";
+                    fallbackTitle = $"UNREAL MOMENT by @{cleanStreamer} 😭 #Shorts #JustChatting";
+                    fallbackDescription = $"Can't stop laughing at this moment with @{cleanStreamer}! 😂\n\nDrop your thoughts in comments 👇\nSubscribe for daily Twitch clips!\n\n#Shorts #JustChatting #TwitchClips #FunnyMoments";
+                    break;
+
+                case "meme":
+                    nicheDescription = "viral internet memes, humor, comedy clips, unexpected twists, and dank memes";
+                    primaryHashtag = "#Memes";
+                    secondaryHashtags = "#Shorts #Memes #DankMemes #Funny #TryNotToLaugh";
+                    callToAction = "Like & subscribe for daily memes!";
+                    exampleTitles = $"'BRO REALLY THOUGHT 💀 @{cleanStreamer} #Shorts #Memes' or 'WAIT TILL THE END 😭 @{cleanStreamer} #Shorts #Memes'";
+                    fallbackTitle = $"WAIT TILL THE END 💀 by @{cleanStreamer} #Shorts #Memes";
+                    fallbackDescription = $"Did you laugh? Be honest in the comments 👇\nLike and subscribe for more daily memes!\n\n#Shorts #Memes #DankMemes #Viral #TryNotToLaugh";
+                    break;
+
+                case "valorant":
+                    nicheDescription = "VALORANT competitive tactical shooter gameplay, radiant clutches, and aces";
+                    primaryHashtag = "#VALORANT";
+                    secondaryHashtags = "#Shorts #VALORANT #ValorantClips #ValorantHighlights #Gaming";
+                    callToAction = "Like & Subscribe for daily VALORANT highlights!";
+                    exampleTitles = $"'TENZ UNREAL 1v5 CLUTCH! 🔥 @{cleanStreamer} #Shorts #VALORANT' or 'RADIANT 200 IQ ACE 🎯 @{cleanStreamer} #Shorts #VALORANT'";
+                    fallbackTitle = subKindKey.ToLower().Contains("ace")
+                        ? $"RADIANT 1v5 ACE by @{cleanStreamer} 🎯 #Shorts #VALORANT"
+                        : $"INSANE 200 IQ PLAY by @{cleanStreamer} 🔥 #Shorts #VALORANT";
+                    fallbackDescription = $"Incredible VALORANT play by @{cleanStreamer}!\n\nRate this play 1-10 👇\nLike and subscribe for daily VALORANT shorts!\n\n#Shorts #VALORANT #ValorantClips #Radiant";
+                    break;
+
+                case "lol":
+                    nicheDescription = "League of Legends esports, soloQ outplays, mechanics, and pentakills";
+                    primaryHashtag = "#LoL";
+                    secondaryHashtags = "#Shorts #LoL #LeagueOfLegends #Outplay #Gaming";
+                    callToAction = "Like & Subscribe for daily LoL highlights!";
+                    exampleTitles = $"'FAKER 1v3 OUTPLAY 😱 @{cleanStreamer} #Shorts #LoL' or 'INSANE PENTAKILL 💥 @{cleanStreamer} #Shorts #LoL'";
+                    fallbackTitle = subKindKey.ToLower().Contains("penta")
+                        ? $"INSANE PENTAKILL by @{cleanStreamer} 💥 #Shorts #LoL"
+                        : $"INSANE OUTPLAY by @{cleanStreamer} 🔥 #Shorts #LoL";
+                    fallbackDescription = $"Incredible League of Legends play by @{cleanStreamer}!\n\nRate this play in comments 👇\nLike and subscribe for daily LoL shorts!\n\n#Shorts #LoL #LeagueOfLegends #Highlights";
+                    break;
+
+                default:
+                    nicheDescription = $"{cleanKind} highlights, best moments, and top clips";
+                    primaryHashtag = $"#{cleanKind.Replace(" ", "")}";
+                    secondaryHashtags = $"#Shorts #{cleanKind.Replace(" ", "")} #Highlights #Clips";
+                    callToAction = $"Like & Subscribe for daily {cleanKind} highlights!";
+                    exampleTitles = $"'INSANE MOMENT 🔥 @{cleanStreamer} #Shorts {primaryHashtag}'";
+                    fallbackTitle = $"INSANE MOMENT by @{cleanStreamer} 🔥 #Shorts {primaryHashtag}";
+                    fallbackDescription = $"Epic highlight from @{cleanStreamer}!\n\nDrop a comment below 👇\nLike and subscribe for daily clips!\n\n#Shorts {primaryHashtag} #Clips #Highlights";
+                    break;
+            }
+
+            var promptSb = new StringBuilder();
+            promptSb.AppendLine($"You are a YouTube Shorts viral algorithm optimizer specializing in {nicheDescription}.");
+            promptSb.AppendLine("Generate high-CTR, viral metadata for a 9:16 vertical YouTube Short clip.");
+            promptSb.AppendLine();
+            promptSb.AppendLine($"Channel Niche / Game: {category}");
+            promptSb.AppendLine($"Category / Play: {subKindKey}");
+            promptSb.AppendLine($"Featured Streamer: @{cleanStreamer}");
+            promptSb.AppendLine($"Original Clip Title: {(string.IsNullOrWhiteSpace(clipTitle) ? "Epic Play" : clipTitle)}");
+
+            if (!string.IsNullOrWhiteSpace(promptHint))
+            {
+                promptSb.AppendLine();
+                promptSb.AppendLine("## SPECIAL CHANNEL TUNING & STYLE GUIDELINES (CRITICAL):");
+                promptSb.AppendLine(promptHint);
+                promptSb.AppendLine("Follow these specific tone, theme, and formatting preferences carefully!");
+            }
+
+            promptSb.AppendLine();
+            promptSb.AppendLine("RULES:");
+            promptSb.AppendLine("1. Title:");
+            promptSb.AppendLine("   - Must be ultra-catchy, dramatic, click-worthy, and under 90 characters.");
+            promptSb.AppendLine("   - Include 1-2 relevant emojis (e.g. 💀, 😭, 😱, 🔥, 🎯).");
+            promptSb.AppendLine($"   - Mention @{cleanStreamer}.");
+            promptSb.AppendLine($"   - MUST end with hashtags '#Shorts {primaryHashtag}'.");
+            promptSb.AppendLine($"   - Top style examples: {exampleTitles}");
+            promptSb.AppendLine("2. Description:");
+            promptSb.AppendLine("   - 2 to 4 concise, engaging lines.");
+            promptSb.AppendLine($"   - Credit streamer: 'Clip featuring @{cleanStreamer}'.");
+            promptSb.AppendLine("   - Include an engagement hook (e.g. 'Did you expect that? Rate in comments! 👇').");
+            promptSb.AppendLine($"   - Call to action: '{callToAction}'.");
+            promptSb.AppendLine($"   - Include relevant hashtags: {secondaryHashtags}.");
+            promptSb.AppendLine("3. Tags:");
+            promptSb.AppendLine("   - Array of 6 to 10 viral tags fitting this channel niche.");
+            promptSb.AppendLine();
+            promptSb.AppendLine("RETURN ONLY RAW JSON conforming to:");
+            promptSb.AppendLine("{");
+            promptSb.AppendLine("  \"title\": \"string\",");
+            promptSb.AppendLine("  \"description\": \"string\",");
+            promptSb.AppendLine("  \"tags\": [\"string\"]");
+            promptSb.AppendLine("}");
 
             var lockAcquired = false;
             try
             {
                 lockAcquired = await _rateLimiter.WaitAsync(TimeSpan.FromSeconds(10));
 
-                var prompt = $@"You are a YouTube Shorts viral algorithm optimizer specializing in gaming clips.
-Generate high-CTR, viral metadata for a 9:16 vertical YouTube Short clip.
-
-Game: {gameName}
-Category / Play: {subKindKey}
-Featured Streamer: @{cleanStreamer}
-Original Clip Title: {(string.IsNullOrWhiteSpace(clipTitle) ? "Epic Play" : clipTitle)}
-
-RULES:
-1. Title:
-   - Must be ultra-catchy, dramatic, click-worthy, and under 90 characters.
-   - Include 1-2 gaming emojis (e.g. 💥, 🔥, 🎯, 💀).
-   - Mention @{cleanStreamer}.
-   - MUST end with hashtags '#Shorts #{gameHashtag}'.
-2. Description:
-   - 2 to 4 concise, engaging lines.
-   - Credit streamer: 'Clip featuring @{cleanStreamer} on Twitch'.
-   - Include an engagement hook (e.g. 'Did you expect that play? Rate 1-10 in the comments! 👇').
-   - Call to action: 'Like & Subscribe for daily {gameHashtag} highlights!'.
-   - Include relevant hashtags: #Shorts #{gameHashtag} #Gaming #Clips #Outplay.
-3. Tags:
-   - Array of 6 to 10 viral tags (e.g. [""Shorts"", ""{gameHashtag} Shorts"", ""{cleanStreamer}"", ...]).
-
-RETURN ONLY RAW JSON conforming to:
-{{
-  ""title"": ""string"",
-  ""description"": ""string"",
-  ""tags"": [""string""]
-}}";
-
-                var rawResponse = await ExecuteLlmRequestWithFallbackAsync(prompt);
+                var rawResponse = await ExecuteLlmRequestWithFallbackAsync(promptSb.ToString(), category);
                 var jsonText = ExtractJson(rawResponse);
 
                 var metadata = JsonSerializer.Deserialize<MetadataResponse>(jsonText, _jsonOptions);
@@ -162,7 +251,7 @@ RETURN ONLY RAW JSON conforming to:
                     result.Description = metadata.Description;
                     result.Tags = (metadata.Tags != null && metadata.Tags.Any())
                         ? metadata.Tags
-                        : new List<string> { "Shorts", "YouTube Shorts", $"{gameHashtag} Shorts", cleanStreamer, "Gaming" };
+                        : TagGenerator.GenerateShortTags(kindKey, category, cleanStreamer, profile?.DefaultTags);
 
                     return result;
                 }
@@ -180,19 +269,24 @@ RETURN ONLY RAW JSON conforming to:
             }
 
             // High-CTR Dynamic Fallback
-            string fallbackTitle = isVal
-                ? (subKindKey.ToLower().Contains("ace") ? $"RADIANT 1v5 ACE by @{cleanStreamer} 🎯 #Shorts #VALORANT" : $"INSANE 200 IQ PLAY by @{cleanStreamer} 🔥 #Shorts #VALORANT")
-                : (subKindKey.ToLower().Contains("penta") ? $"INSANE PENTAKILL by @{cleanStreamer} 💥 #Shorts #LoL" : $"INSANE OUTPLAY by @{cleanStreamer} 🔥 #Shorts #LoL");
-
             result.Title = fallbackTitle;
-            result.Description = $"Incredible play by @{cleanStreamer}!\n\nRate this play in comments 👇\nLike and subscribe for daily {gameName} shorts!\n\n#Shorts #{gameHashtag} #Gaming #Clips #Highlights";
-            result.Tags = new List<string> { "Shorts", "YouTube Shorts", $"{gameHashtag} Shorts", $"{gameHashtag} Clips", cleanStreamer, "Gaming" };
+            result.Description = fallbackDescription;
+            result.Tags = TagGenerator.GenerateShortTags(kindKey, category, cleanStreamer, profile?.DefaultTags);
 
             return result;
         }
 
-        private async Task<string> ExecuteLlmRequestWithFallbackAsync(string prompt)
+        private async Task<string> ExecuteLlmRequestWithFallbackAsync(string prompt, string? category = null)
         {
+            var systemRole = (category ?? "").ToLowerInvariant() switch
+            {
+                "meme" => "You are a viral YouTube Shorts and video SEO expert specializing in internet memes, humor, and comedy content. Always return valid raw JSON.",
+                "just_chatting" => "You are a viral YouTube SEO expert specializing in Twitch Just Chatting, livestream highlights, and creator reactions. Always return valid raw JSON.",
+                "valorant" => "You are a YouTube SEO expert specializing in VALORANT and tactical FPS highlights. Always return valid raw JSON.",
+                "lol" => "You are a YouTube SEO expert specializing in League of Legends esports and competitive highlights. Always return valid raw JSON.",
+                _ => "You are a YouTube SEO expert specializing in gaming and creator content. Always return valid raw JSON."
+            };
+
             var modelsToTry = new List<string>
             {
                 _primaryModel,
@@ -219,7 +313,7 @@ RETURN ONLY RAW JSON conforming to:
                         model = model,
                         messages = new[]
                         {
-                            new { role = "system", content = "You are a YouTube SEO expert specializing in gaming content. Always return valid raw JSON." },
+                            new { role = "system", content = systemRole },
                             new { role = "user", content = prompt }
                         },
                         stream = false
@@ -274,7 +368,7 @@ RETURN ONLY RAW JSON conforming to:
                         model = model,
                         messages = new[]
                         {
-                            new { role = "system", content = "You are a YouTube SEO expert specializing in gaming content. Always return valid raw JSON." },
+                            new { role = "system", content = systemRole },
                             new { role = "user", content = prompt }
                         },
                         temperature = 0.7
@@ -341,18 +435,46 @@ RETURN ONLY RAW JSON conforming to:
         private string BuildComprehensivePrompt(MontageItem package, MontageProfile profile)
         {
             var sb = new StringBuilder();
+            var category = (profile.Category ?? "gaming").ToLowerInvariant();
+
+            string nicheExpertise = category switch
+            {
+                "meme" => "viral internet memes, humor, comedy clips, and dank compilation videos",
+                "just_chatting" => "Twitch Just Chatting highlights, livestream drama, comedy, and streamer reaction compilations",
+                "valorant" => "VALORANT esports and tactical FPS competitive highlights",
+                "lol" => "League of Legends esports, soloQ outplays, and competitive highlights",
+                _ => "gaming highlights and creator compilations"
+            };
+
+            string titleExamples = category switch
+            {
+                "meme" => "'BRO REALLY THOUGHT 💀 Best Dank Memes Compilation' or 'TRY NOT TO LAUGH CHALLENGE (IMPOSSIBLE) 😭'",
+                "just_chatting" => "'HE HAD NO IDEA THE MIC WAS ON 💀 Best Twitch Moments' or 'KAI CENAT LOSES HIS MIND 😭 Funniest Streamer Clips'",
+                "valorant" => "'TENZ UNREAL 1v5 CLUTCH! 🔥 Valorant Highlights' or 'RADIANT 200 IQ PLAYS 🎯 Valorant Compilation'",
+                "lol" => "'FAKER DID IT AGAIN! 😱 Best LoL Highlights' or 'INSANE 1v5 PENTAKILL! 💥 League of Legends Plays'",
+                _ => $"'INSANE TOP MOMENTS! 🔥 Best {profile.KindKey} Highlights'"
+            };
 
             sb.AppendLine("# TASK: Generate YouTube Video Metadata");
             sb.AppendLine();
-            sb.AppendLine("You are a YouTube SEO expert specializing in gaming content. Generate an engaging title and description.");
+            sb.AppendLine($"You are a YouTube SEO expert specializing in {nicheExpertise}. Generate an engaging, high-CTR title and description.");
             sb.AppendLine();
             sb.AppendLine("## VIDEO INFORMATION:");
-            sb.AppendLine($"- Game: {profile.KindKey}");
+            sb.AppendLine($"- Channel / Game: {profile.KindKey}");
+            sb.AppendLine($"- Channel Category: {category}");
             var contentType = !string.IsNullOrWhiteSpace(package.SubKindKey) ? package.SubKindKey : (profile.SubKindKey ?? "Highlights");
-            sb.AppendLine($"- Content Type: {contentType}");
+            sb.AppendLine($"- Content Subkind: {contentType}");
             sb.AppendLine($"- Total Clips: {package.Clips.Count}");
             sb.AppendLine($"- Video Duration: {package.TotalDuration.TotalMinutes:F1} minutes");
             sb.AppendLine();
+
+            if (!string.IsNullOrWhiteSpace(profile.PromptHint))
+            {
+                sb.AppendLine("## CHANNEL STYLE GUIDELINES & CREATOR TUNING (CRITICAL):");
+                sb.AppendLine(profile.PromptHint);
+                sb.AppendLine("Carefully adapt your tone, vocabulary, and emotional hook to these specific style instructions!");
+                sb.AppendLine();
+            }
 
             sb.AppendLine("## STREAMERS FEATURED:");
             var streamers = package.Clips
@@ -381,15 +503,15 @@ RETURN ONLY RAW JSON conforming to:
             sb.AppendLine("### Title (50-70 characters):");
             sb.AppendLine("- High-CTR packaging: Front-load the biggest featured creator or play type, followed by an emotional hook");
             sb.AppendLine("- Do NOT use generic episode numbers like '#127' or robotic filler text");
-            sb.AppendLine("- Include the game name naturally (e.g. 'LoL' or 'Valorant')");
+            sb.AppendLine("- Mention the topic or game name naturally");
             sb.AppendLine("- 1 emoji maximum (e.g., 💀, 😱, 🔥, ⚡)");
-            sb.AppendLine($"- Proven top-channel style examples: 'FAKER DID IT AGAIN! 😱 Best LoL Highlights' or 'TENZ UNREAL 1v5 CLUTCH! 🔥 Valorant Highlights'");
+            sb.AppendLine($"- Proven top-channel style examples: {titleExamples}");
             sb.AppendLine();
 
             sb.AppendLine("### Description (100-200 words, maximum 1200 characters):");
-            sb.AppendLine("- Front-load the first 2 sentences with an irresistible summary hook containing natural gaming keywords");
+            sb.AppendLine("- Front-load the first 2 sentences with an irresistible summary hook containing natural keywords");
             sb.AppendLine("- Mention the top creators featured naturally in the text");
-            sb.AppendLine("- Include a clear engagement call-to-action (e.g. 'Which play was your favorite? Let us know in the comments!')");
+            sb.AppendLine("- Include a clear engagement call-to-action (e.g. 'Which moment was your favorite? Let us know in the comments!')");
             sb.AppendLine("- DO NOT include any links, URLs, or social media addresses");
             sb.AppendLine("- DO NOT include timestamps (they are generated separately)");
             sb.AppendLine("- Keep it punchy and engaging for YouTube Browse & Suggested algorithms");
@@ -408,6 +530,7 @@ RETURN ONLY RAW JSON conforming to:
         private string BuildFinalDescription(string aiDescription, MontageItem package, MontageProfile profile)
         {
             var sb = new StringBuilder();
+            var category = (profile.Category ?? "gaming").ToLowerInvariant();
 
             if (!string.IsNullOrWhiteSpace(aiDescription))
             {
@@ -427,18 +550,31 @@ RETURN ONLY RAW JSON conforming to:
 
             if (uniqueStreamers.Any())
             {
-                sb.AppendLine("🎮 FEATURED CREATORS:");
+                string creatorHeader = (category == "just_chatting" || category == "meme")
+                    ? "⭐ FEATURED CREATORS:"
+                    : "🎮 FEATURED CREATORS:";
+                sb.AppendLine(creatorHeader);
                 sb.AppendLine(string.Join(", ", uniqueStreamers.Select(s => $"@{s}")));
                 sb.AppendLine();
             }
 
-            var gameHashtags = (profile.KindKey ?? "").ToLower() switch
+            string hashtags;
+            if (profile.CustomHashtags != null && profile.CustomHashtags.Any())
             {
-                "lol" => "#LeagueOfLegends #LoLHighlights #LeagueOfLegendsClips #LoL",
-                "valorant" => "#VALORANT #ValorantHighlights #ValorantClips #VCT",
-                _ => $"#Gaming #{(profile.KindKey ?? "").Replace(" ", "")} #Highlights #GamingClips"
-            };
-            sb.AppendLine(gameHashtags);
+                hashtags = string.Join(" ", profile.CustomHashtags);
+            }
+            else
+            {
+                hashtags = category switch
+                {
+                    "just_chatting" => "#JustChatting #TwitchClips #TwitchHighlights #StreamerMoments #Twitch",
+                    "meme" => "#Memes #DankMemes #Funny #TryNotToLaugh #MemeCompilation",
+                    "lol" => "#LeagueOfLegends #LoLHighlights #LeagueOfLegendsClips #LoL",
+                    "valorant" => "#VALORANT #ValorantHighlights #ValorantClips #VCT",
+                    _ => $"#Gaming #{(profile.KindKey ?? "").Replace(" ", "")} #Highlights #GamingClips"
+                };
+            }
+            sb.AppendLine(hashtags);
 
             return TextFormatter.FixDescription(sb.ToString(), 4800);
         }
@@ -446,12 +582,21 @@ RETURN ONLY RAW JSON conforming to:
         private string BuildFallbackDescription(MontageItem package, MontageProfile profile)
         {
             var sb = new StringBuilder();
+            var category = (profile.Category ?? "gaming").ToLowerInvariant();
             var contentLabel = !string.IsNullOrWhiteSpace(package.SubKindKey) && package.SubKindKey != "normal"
                 ? $" {package.SubKindKey.ToUpper()}"
                 : "";
-            sb.AppendLine($"Check out this amazing {profile.KindKey}{contentLabel} compilation featuring the best moments from top streamers!");
+
+            string introText = category switch
+            {
+                "meme" => $"The absolute funniest memes and viral internet clips compilation!",
+                "just_chatting" => $"Check out this incredible {profile.KindKey} compilation featuring the most hilarious and shocking moments from top livestreams!",
+                _ => $"Check out this amazing {profile.KindKey}{contentLabel} compilation featuring the best moments from top streamers!"
+            };
+
+            sb.AppendLine(introText);
             sb.AppendLine();
-            sb.AppendLine("This video showcases incredible plays, funny moments, and epic highlights.");
+            sb.AppendLine("Drop a like and subscribe for more daily highlights!");
             sb.AppendLine();
 
             sb.Append(BuildSmartTimestamps(package));
@@ -466,21 +611,31 @@ RETURN ONLY RAW JSON conforming to:
 
             if (streamers.Any())
             {
-                sb.AppendLine("🎮 FEATURED CREATORS:");
+                string creatorHeader = (category == "just_chatting" || category == "meme")
+                    ? "⭐ FEATURED CREATORS:"
+                    : "🎮 FEATURED CREATORS:";
+                sb.AppendLine(creatorHeader);
                 sb.AppendLine(string.Join(", ", streamers.Select(s => $"@{s}")));
                 sb.AppendLine();
             }
 
-            sb.AppendLine("Don't forget to like and subscribe for more content!");
-            sb.AppendLine();
-
-            var gameHashtags = (profile.KindKey ?? "").ToLower() switch
+            string hashtags;
+            if (profile.CustomHashtags != null && profile.CustomHashtags.Any())
             {
-                "lol" => "#LeagueOfLegends #LoLHighlights #LeagueOfLegendsClips #LoL",
-                "valorant" => "#VALORANT #ValorantHighlights #ValorantClips #VCT",
-                _ => $"#Gaming #{(profile.KindKey ?? "").Replace(" ", "")} #Highlights #GamingClips"
-            };
-            sb.AppendLine(gameHashtags);
+                hashtags = string.Join(" ", profile.CustomHashtags);
+            }
+            else
+            {
+                hashtags = category switch
+                {
+                    "just_chatting" => "#JustChatting #TwitchClips #TwitchHighlights #StreamerMoments",
+                    "meme" => "#Memes #DankMemes #Funny #TryNotToLaugh",
+                    "lol" => "#LeagueOfLegends #LoLHighlights #LeagueOfLegendsClips #LoL",
+                    "valorant" => "#VALORANT #ValorantHighlights #ValorantClips #VCT",
+                    _ => $"#Gaming #{(profile.KindKey ?? "").Replace(" ", "")} #Highlights #GamingClips"
+                };
+            }
+            sb.AppendLine(hashtags);
 
             return TextFormatter.FixDescription(sb.ToString(), 4800);
         }

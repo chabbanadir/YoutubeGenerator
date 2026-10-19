@@ -6,6 +6,7 @@ namespace YoutubeGenerator.Interfaces
     public interface IShortsSchedulerService
     {
         Task<ShortItem?> QueueShortAsync(string shortFilePath, ClipInfo clip, double durationSeconds);
-        Task<bool> ProcessNextScheduledShortAsync();
+        Task<bool> ProcessNextScheduledShortAsync(bool forceImmediate = false);
+        Task<bool> ForceUploadShortImmediatelyAsync(string shortId);
     }
 }

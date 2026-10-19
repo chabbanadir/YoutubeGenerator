@@ -35,12 +35,25 @@ export function renderKindsGrid(kinds, callbacks = {}) {
     const isTikTokConnected = tikTokCfg.Connected === true;
     const tikTokDisplayName = tikTokCfg.DisplayName || '';
 
+    const category = (data.Category || (kindKey.includes('val') ? 'valorant' : (kindKey === 'lol' ? 'lol' : (kindKey.includes('chat') ? 'just_chatting' : (kindKey.includes('meme') ? 'meme' : 'gaming'))))).toLowerCase();
+    const promptHint = data.PromptHint || '';
+
+    const categoryThemes = {
+      valorant: { color: '#f43f5e', label: '🎯 VALORANT' },
+      lol: { color: '#38bdf8', label: '⚔️ LEAGUE' },
+      just_chatting: { color: '#a855f7', label: '💬 JUST CHATTING' },
+      meme: { color: '#f59e0b', label: '😂 MEMES' },
+      gaming: { color: '#10b981', label: '🎮 GAMING' }
+    };
+    const currentTheme = categoryThemes[category] || categoryThemes.gaming;
+    const topAccentColor = currentTheme.color;
+
     return `
       <div class="profile-card" data-kind-file="${escapedFileName}" style="border-top: 3px solid ${topAccentColor};">
         <div class="profile-card-header" style="display: flex; justify-content: space-between; align-items: center;">
-          <div class="profile-title-group">
-            <span class="profile-kind-badge ${badgeThemeClass}">
-              ${escapeHtml(kindTitle)}
+          <div class="profile-title-group" style="display: flex; align-items: center; gap: 0.5rem;">
+            <span class="profile-kind-badge" style="background: rgba(${topAccentColor === '#f43f5e' ? '244,63,94' : (topAccentColor === '#38bdf8' ? '56,189,248' : (topAccentColor === '#a855f7' ? '168,85,247' : (topAccentColor === '#f59e0b' ? '245,158,11' : '16,185,129')))}, 0.15); color: ${topAccentColor}; border: 1px solid ${topAccentColor}44; font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 0.72rem;">
+              ${escapeHtml(currentTheme.label)}
             </span>
             <span class="profile-filename" title="${escapedFileName}">${escapedFileName}</span>
           </div>
@@ -54,6 +67,22 @@ export function renderKindsGrid(kinds, callbacks = {}) {
               </button>
             ` : ''}
           </div>
+        </div>
+
+        <!-- Channel Category Selector -->
+        <div class="profile-section" style="padding: 0.4rem 0.6rem; background: rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+          <span style="font-size: 0.74rem; color: var(--text-muted); font-weight: 600;">Category:</span>
+          ${state.isAuthenticatedUser ? `
+            <select class="form-control" id="category-select-${escapedFileName}" onchange="window.onKindCardModified('${safeFileName}')" style="font-size: 0.76rem; background: rgba(0,0,0,0.5); color: ${topAccentColor}; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 3px 8px; font-weight: 600;">
+              <option value="gaming" ${category === 'gaming' ? 'selected' : ''}>🎮 Gaming (General)</option>
+              <option value="just_chatting" ${category === 'just_chatting' ? 'selected' : ''}>💬 Just Chatting / IRL</option>
+              <option value="meme" ${category === 'meme' ? 'selected' : ''}>😂 Memes & Humor</option>
+              <option value="valorant" ${category === 'valorant' ? 'selected' : ''}>🎯 VALORANT</option>
+              <option value="lol" ${category === 'lol' ? 'selected' : ''}>⚔️ League of Legends</option>
+            </select>
+          ` : `
+            <span style="font-size: 0.76rem; font-weight: 600; color: ${topAccentColor};">${escapeHtml(currentTheme.label)}</span>
+          `}
         </div>
 
         <div class="profile-section">
@@ -105,13 +134,31 @@ export function renderKindsGrid(kinds, callbacks = {}) {
           </div>
         </div>
 
+        <!-- LLM Prompt Hint Tuning Box -->
+        <div class="profile-section" style="padding: 0.45rem 0.65rem; background: rgba(0,0,0,0.22); border-left: 2px solid #a855f7;">
+          <div style="font-size: 0.72rem; color: #c084fc; font-weight: 600; display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
+            <span><i data-lucide="sparkles" style="width: 12px; height: 12px; display: inline;"></i> LLM Prompt Tuning Hint:</span>
+          </div>
+          ${state.isAuthenticatedUser ? `
+            <textarea class="form-control"
+                      id="prompt-hint-${escapedFileName}"
+                      rows="2"
+                      placeholder="Tone & style instructions for AI titles & descriptions..."
+                      oninput="window.onKindCardModified('${safeFileName}')"
+                      style="font-size: 0.75rem; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08); color: #e2e8f0; width: 100%; border-radius: 4px; resize: vertical;">${escapeHtml(promptHint)}</textarea>
+          ` : `
+            <div style="font-size: 0.75rem; color: var(--text-muted); font-style: italic;">${escapeHtml(promptHint || 'Default viral packaging')}</div>
+          `}
+        </div>
+
         <div class="profile-section">
           <div class="profile-section-title">
-            <i data-lucide="zap" style="width: 14px; height: 14px; color: #f59e0b;"></i> Upload Automation Rules
+            <i data-lucide="zap" style="width: 14px; height: 14px; color: #f59e0b;"></i> Upload Cadence & Rhythm
           </div>
-          <div class="profile-stats-grid">
+          <div class="profile-stats-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+            <!-- Long Video Min Delay -->
             <div class="profile-stat-box" style="position: relative; padding: 0.4rem 0.5rem; display: flex; flex-direction: column; align-items: center;">
-              <span class="profile-stat-label">Min Delay</span>
+              <span class="profile-stat-label">Long Delay</span>
               <div style="display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-top: 0.15rem;">
                 ${state.isAuthenticatedUser ? `
                   <button type="button" class="btn-step-counter" onclick="window.stepKindMinDelay('${safeFileName}', -1)" title="Decrease delay by 1 hour">
@@ -129,13 +176,30 @@ export function renderKindsGrid(kinds, callbacks = {}) {
                 ` : ''}
               </div>
             </div>
-            <div class="profile-stat-box">
-              <span class="profile-stat-label">Counter</span>
-              <span class="profile-stat-value" style="color: #34d399;">${uploadCfg.UploadCounter ?? 0}</span>
+
+            <!-- Shorts Cadence -->
+            <div class="profile-stat-box" style="position: relative; padding: 0.4rem 0.5rem; display: flex; flex-direction: column; align-items: center;">
+              <span class="profile-stat-label">Shorts Cadence</span>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 0.25rem; margin-top: 0.15rem;">
+                ${state.isAuthenticatedUser ? `
+                  <input type="number"
+                         id="shorts-cadence-${escapedFileName}"
+                         value="${uploadCfg.ShortsCadenceMinutes ?? 60}"
+                         min="10"
+                         step="5"
+                         oninput="window.onKindCardModified('${safeFileName}')"
+                         style="width: 48px; background: rgba(0,0,0,0.4); border: 1px solid rgba(168,85,247,0.3); color: #c084fc; font-weight: 700; text-align: center; border-radius: 4px; font-size: 0.85rem; padding: 1px;" />
+                ` : `
+                  <span style="color: #c084fc; font-weight: 700; font-size: 0.9rem;">${uploadCfg.ShortsCadenceMinutes ?? 60}</span>
+                `}
+                <span style="font-size: 0.72rem; color: #c084fc; font-weight: 600;">min</span>
+              </div>
             </div>
+
+            <!-- Status / Counter -->
             <div class="profile-stat-box">
-              <span class="profile-stat-label">Status</span>
-              <span class="profile-stat-value" style="color: ${isEnabled ? '#34d399' : '#94a3b8'}; font-size: 0.75rem;">${isEnabled ? 'ACTIVE' : 'PAUSED'}</span>
+              <span class="profile-stat-label">Uploaded</span>
+              <span class="profile-stat-value" style="color: #34d399;">${uploadCfg.UploadCounter ?? 0}</span>
             </div>
           </div>
           <div style="font-size: 0.74rem; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; margin-top: 0.15rem; padding: 0 0.2rem;">
@@ -218,6 +282,9 @@ export async function saveKindCard(fileName) {
   const saveBtn = document.getElementById(`save-btn-${safeFileName}`);
   const channelInput = document.getElementById(`channel-input-${safeFileName}`);
   const minDelaySpan = document.getElementById(`min-delay-val-${safeFileName}`);
+  const categorySelect = document.getElementById(`category-select-${safeFileName}`);
+  const promptHintTextarea = document.getElementById(`prompt-hint-${safeFileName}`);
+  const shortsCadenceInput = document.getElementById(`shorts-cadence-${safeFileName}`);
 
   if (!saveBtn) return;
 
@@ -227,6 +294,9 @@ export async function saveKindCard(fileName) {
 
   const channelId = channelInput ? channelInput.value.trim() : '';
   const minDelayHours = minDelaySpan ? (parseInt(minDelaySpan.textContent, 10) || 8) : 8;
+  const category = categorySelect ? categorySelect.value : 'gaming';
+  const promptHint = promptHintTextarea ? promptHintTextarea.value.trim() : '';
+  const shortsCadenceMinutes = shortsCadenceInput ? (parseFloat(shortsCadenceInput.value) || 60) : 60;
 
   try {
     const res = await fetch(getApiUrl(`/api/dashboard/profiles/kinds/${encodeURIComponent(fileName)}`), {
@@ -236,8 +306,11 @@ export async function saveKindCard(fileName) {
       },
       body: JSON.stringify({
         YoutubeChannelId: channelId,
+        Category: category,
+        PromptHint: promptHint,
         UploadConfig: {
-          MinDelayHours: minDelayHours
+          MinDelayHours: minDelayHours,
+          ShortsCadenceMinutes: shortsCadenceMinutes
         }
       })
     });
@@ -288,12 +361,21 @@ export async function handleCreateKind(e, callbacks = {}) {
 
   const channelId = document.getElementById('newKindChannelId').value.trim();
   const minDelayHours = parseInt(document.getElementById('newKindMinDelayHours').value, 10) || 8;
+  const category = document.getElementById('newKindCategory')?.value || 'gaming';
+  const promptHint = document.getElementById('newKindPromptHint')?.value.trim() || '';
+  const shortsCadenceMinutes = parseFloat(document.getElementById('newKindShortsCadenceMinutes')?.value) || 60;
+  const defaultTagsRaw = document.getElementById('newKindDefaultTags')?.value || '';
+  const defaultTags = defaultTagsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
   const payload = {
     KindKey: keyInput,
+    Category: category,
+    PromptHint: promptHint,
+    DefaultTags: defaultTags,
     YoutubeChannelId: channelId,
     UploadConfig: {
       MinDelayHours: minDelayHours,
+      ShortsCadenceMinutes: shortsCadenceMinutes,
       UploadCounter: 0
     }
   };
@@ -314,7 +396,7 @@ export async function handleCreateKind(e, callbacks = {}) {
       throw new Error(data.message || 'Failed to create Kind profile.');
     }
 
-    showToast(`Kind profile '${keyInput}' created successfully!`, 'success');
+    showToast(`Kind profile '${keyInput}' (${category}) created successfully!`, 'success');
     closeCreateKindModal();
     if (callbacks.onFetchProfiles) await callbacks.onFetchProfiles();
   } catch (err) {
@@ -341,12 +423,21 @@ export async function handleCreateAndConnectKind(e, callbacks = {}) {
   const createAndConnectBtn = document.getElementById('createAndConnectBtn');
   const channelId = document.getElementById('newKindChannelId').value.trim();
   const minDelayHours = parseInt(document.getElementById('newKindMinDelayHours').value, 10) || 8;
+  const category = document.getElementById('newKindCategory')?.value || 'gaming';
+  const promptHint = document.getElementById('newKindPromptHint')?.value.trim() || '';
+  const shortsCadenceMinutes = parseFloat(document.getElementById('newKindShortsCadenceMinutes')?.value) || 60;
+  const defaultTagsRaw = document.getElementById('newKindDefaultTags')?.value || '';
+  const defaultTags = defaultTagsRaw.split(',').map(s => s.trim()).filter(Boolean);
 
   const payload = {
     KindKey: keyInput,
+    Category: category,
+    PromptHint: promptHint,
+    DefaultTags: defaultTags,
     YoutubeChannelId: channelId,
     UploadConfig: {
       MinDelayHours: minDelayHours,
+      ShortsCadenceMinutes: shortsCadenceMinutes,
       UploadCounter: 0
     }
   };

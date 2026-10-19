@@ -365,6 +365,10 @@ export function renderVisualItemCard(item, idx) {
     return renderClipInfoCard(item, idx);
   }
 
+  if (item.ShortId || (item.FilePath && item.DurationSeconds !== undefined)) {
+    return renderShortItemCard(item, idx);
+  }
+
   if (item.MontageId || item.Clips) {
     return renderMontageItemCard(item, idx);
   }
@@ -449,11 +453,76 @@ export function renderClipInfoCard(item, idx) {
   `;
 }
 
+// Specialized Visual Card for YouTube Shorts (ShortItem)
+export function renderShortItemCard(item, idx) {
+  const title = item.Title || `Short #${idx + 1}`;
+  const streamer = item.Streamer || 'Streamer';
+  const kind = (item.KindKey || 'gaming').toUpperCase();
+  const subKind = item.SubKindKey || '';
+  const isUploaded = item.IsUploaded === true;
+  const scheduledTime = item.ScheduledPublishTime ? formatDate(item.ScheduledPublishTime) : 'Pending';
+  const safeShortId = escapeJsString(item.ShortId || '');
+
+  return `
+    <div class="item-card card-short" style="border-top: 3px solid ${isUploaded ? '#10b981' : '#a855f7'};">
+      <div class="item-card-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <span class="streamer-badge">
+            ${getTwitchIcon(12, 'color: #9146FF; margin-right: 4px;')}
+            ${escapeHtml(streamer)}
+          </span>
+          <span class="tag-chip game">${escapeHtml(kind)}</span>
+          ${subKind ? `<span class="tag-chip subkind">${escapeHtml(subKind)}</span>` : ''}
+          <span class="tag-chip ${isUploaded ? 'success' : 'warning'}">
+            <i data-lucide="${isUploaded ? 'check-circle' : 'clock'}" style="width: 12px; height: 12px;"></i>
+            ${isUploaded ? 'Uploaded' : 'Scheduled'}
+          </span>
+        </div>
+        <span class="item-badge secondary">#${idx + 1}</span>
+      </div>
+
+      <div class="item-card-body">
+        <h4 style="font-size: 0.95rem; font-weight: 700; color: white; margin-bottom: 0.4rem; line-height: 1.4;">
+          ${escapeHtml(title)}
+        </h4>
+
+        <div style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.78rem; background: rgba(0,0,0,0.25); padding: 0.5rem; border-radius: 6px; margin-bottom: 0.5rem;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);"><i data-lucide="calendar" style="width: 12px; height: 12px; display: inline;"></i> Scheduled:</span>
+            <span style="color: #c084fc; font-weight: 600; font-family: monospace;">${escapeHtml(scheduledTime)}</span>
+          </div>
+          ${item.DurationSeconds ? `
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: var(--text-muted);"><i data-lucide="clock" style="width: 12px; height: 12px; display: inline;"></i> Duration:</span>
+              <span style="color: #38bdf8; font-weight: 600;">${item.DurationSeconds.toFixed(1)}s</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="clip-action-bar" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          ${item.YoutubeVideoId ? `
+            <a href="https://youtube.com/shorts/${escapeHtml(item.YoutubeVideoId)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="flex: 1; justify-content: center; text-decoration: none; background: #FF0000; border-color: #FF0000;">
+              ${getYoutubeIcon(14, 'margin-right: 4px;')} View Short
+            </a>
+          ` : ''}
+
+          ${(!isUploaded && state.isAuthenticatedUser && safeShortId) ? `
+            <button type="button" class="btn btn-sm" style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 700; border: none; display: inline-flex; align-items: center; gap: 4px; padding: 0.35rem 0.75rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(16,185,129,0.3); cursor: pointer;" onclick="window.uploadShortImmediately('${safeShortId}')" title="Upload this short to YouTube immediately">
+              <i data-lucide="zap" style="width: 13px; height: 13px;"></i> Upload Now
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // Specialized Visual Card for Montage Packages
 export function renderMontageItemCard(item, idx) {
   const title = item.GeneratedTitle || item.MontageId || `Montage #${idx + 1}`;
   const clipsCount = Array.isArray(item.Clips) ? item.Clips.length : 0;
   const isDone = item.Completed === true;
+  const safeMontageId = escapeJsString(item.MontageId || '');
 
   return `
     <div class="item-card card-montage">
@@ -477,13 +546,19 @@ export function renderMontageItemCard(item, idx) {
           </div>
         ` : ''}
 
-        ${item.YoutubeUrl ? `
-          <div class="clip-action-bar" style="margin-top: 0.5rem;">
+        <div class="clip-action-bar" style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+          ${item.YoutubeUrl ? `
             <a href="${escapeHtml(item.YoutubeUrl)}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" style="flex: 1; justify-content: center; text-decoration: none; background: #FF0000; border-color: #FF0000;">
               ${getYoutubeIcon(14, 'margin-right: 4px;')} Open YouTube
             </a>
-          </div>
-        ` : ''}
+          ` : ''}
+
+          ${(!isDone && state.isAuthenticatedUser && safeMontageId) ? `
+            <button type="button" class="btn btn-sm" style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 700; border: none; display: inline-flex; align-items: center; gap: 4px; padding: 0.35rem 0.75rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(16,185,129,0.3); cursor: pointer;" onclick="window.uploadMontageImmediately('${safeMontageId}')" title="Upload this montage to YouTube immediately">
+              <i data-lucide="zap" style="width: 13px; height: 13px;"></i> Upload Now
+            </button>
+          ` : ''}
+        </div>
       </div>
     </div>
   `;
@@ -623,3 +698,101 @@ export function renderBagsSidebarList(bags) {
     if (window.lucide) lucide.createIcons({ targets: [ribbonContainer] });
   }
 }
+
+// Immediate Upload API Triggers
+export async function uploadShortImmediately(shortId) {
+  if (!state.isAuthenticatedUser) {
+    showToast('Please login as Admin to force uploads', 'warning');
+    return;
+  }
+  if (!shortId) return;
+
+  const confirmed = confirm(`Are you sure you want to upload Short '${shortId}' to YouTube immediately?`);
+  if (!confirmed) return;
+
+  showToast(`⚡ Uploading short '${shortId}' now...`, 'info');
+
+  try {
+    const res = await fetch(getApiUrl(`/api/dashboard/shorts/${encodeURIComponent(shortId)}/upload-now`), {
+      method: 'POST'
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
+      showToast(data.message || `Short '${shortId}' uploaded successfully!`, 'success');
+      if (state.currentSelectedBag) {
+        await loadSelectedBag(state.currentSelectedBag);
+      }
+    } else {
+      showToast(data.message || `Failed to upload short '${shortId}'`, 'error');
+    }
+  } catch (err) {
+    console.error('Error triggering immediate short upload:', err);
+    showToast(`Network error: ${err.message}`, 'error');
+  }
+}
+
+export async function uploadMontageImmediately(montageId) {
+  if (!state.isAuthenticatedUser) {
+    showToast('Please login as Admin to force uploads', 'warning');
+    return;
+  }
+  if (!montageId) return;
+
+  const confirmed = confirm(`Are you sure you want to trigger immediate upload for Montage '${montageId}'?`);
+  if (!confirmed) return;
+
+  showToast(`⚡ Triggering immediate upload for montage '${montageId}'...`, 'info');
+
+  try {
+    const res = await fetch(getApiUrl(`/api/dashboard/montages/${encodeURIComponent(montageId)}/upload-now`), {
+      method: 'POST'
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
+      showToast(data.message || `Montage '${montageId}' immediate upload initiated!`, 'success');
+      if (state.currentSelectedBag) {
+        await loadSelectedBag(state.currentSelectedBag);
+      }
+    } else {
+      showToast(data.message || `Failed to trigger montage upload: ${montageId}`, 'error');
+    }
+  } catch (err) {
+    console.error('Error triggering immediate montage upload:', err);
+    showToast(`Network error: ${err.message}`, 'error');
+  }
+}
+
+export async function triggerImmediateUploadAll() {
+  if (!state.isAuthenticatedUser) {
+    showToast('Please login as Admin to force uploads', 'warning');
+    return;
+  }
+
+  showToast('⚡ Processing next scheduled short and triggering YouTube upload...', 'info');
+
+  try {
+    const res = await fetch(getApiUrl('/api/dashboard/trigger-immediate-upload'), {
+      method: 'POST'
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
+      showToast(data.message || 'Immediate upload cycle triggered successfully!', 'success');
+      if (state.currentSelectedBag) {
+        await loadSelectedBag(state.currentSelectedBag);
+      }
+    } else {
+      showToast(data.message || 'Failed to trigger upload cycle', 'error');
+    }
+  } catch (err) {
+    console.error('Error triggering immediate upload all:', err);
+    showToast(`Network error: ${err.message}`, 'error');
+  }
+}
+
+// Bind to window for direct HTML onclick execution
+window.uploadShortImmediately = uploadShortImmediately;
+window.uploadMontageImmediately = uploadMontageImmediately;
+window.triggerImmediateUploadAll = triggerImmediateUploadAll;
