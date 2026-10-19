@@ -20,7 +20,6 @@ export function renderKindsGrid(kinds, callbacks = {}) {
     const safeFileName = escapeJsString(k.fileName);
 
     const badgeThemeClass = kindKey === 'lol' ? 'lol' : (kindKey === 'valorant' ? 'valorant' : 'default');
-    const topAccentColor = isEnabled ? '#10b981' : '#64748b';
 
     const formattedLastUpload = uploadCfg.LastUploadTime 
       ? formatDate(uploadCfg.LastUploadTime) 
