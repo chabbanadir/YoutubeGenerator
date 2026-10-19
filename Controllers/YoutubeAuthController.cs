@@ -60,6 +60,27 @@ namespace YoutubeGenerator.Controllers
             return $"{scheme}://{host}/api/youtube/callback";
         }
 
+        [HttpGet("connect")]
+        public IActionResult Connect([FromQuery] string kind)
+        {
+            if (string.IsNullOrWhiteSpace(kind))
+            {
+                return BadRequest("Parameter 'kind' is required.");
+            }
+
+            try
+            {
+                var redirectUri = GetRedirectUri();
+                var url = _authService.GetAuthorizationUrl(kind.Trim().ToLowerInvariant(), redirectUri);
+                return Redirect(url);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initiate YouTube connection.");
+                return StatusCode(500, ex.Message);
+            }
+        }
+
         [HttpGet("auth-url")]
         public IActionResult GetAuthUrl([FromQuery] string kind)
         {
