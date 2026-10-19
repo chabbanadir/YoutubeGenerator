@@ -1,0 +1,37 @@
+{
+  "KindKey": "whats_going_on",
+  "Category": "just_chatting",
+  "PromptHint": "Twitch Just Chatting clips, hilarious streamer banter, out-of-context conversations, funny drama, reactions, and viral stream moments. High energy, punchy and engaging.",
+  "DefaultTags": [
+    "Shorts",
+    "Just Chatting",
+    "Twitch Just Chatting",
+    "Twitch Clips",
+    "Stream Highlights",
+    "Streamer Reactions",
+    "Funny Moments",
+    "Viral Stream Clips",
+    "Twitch Highlights",
+    "Trending"
+  ],
+  "CustomHashtags": [
+    "#Shorts",
+    "#JustChatting",
+    "#Twitch",
+    "#TwitchClips",
+    "#Viral"
+  ],
+  "YoutubeChannelId": "UCKfvJtoyXtxtC69KNpa9CXQ",
+  "UploadConfig": {
+    "MinDelayHours": 10,
+    "ShortsCadenceMinutes": 60,
+    "UploadCounter": 0,
+    "Enabled": true
+  },
+  "YoutubeClientId": "578620244358-6i2if9e46tn6si9lbumkc2km0epoamqi.apps.googleusercontent.com",
+  "YoutubeClientSecret": "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",
+  "YoutubeRefreshToken": "1//03DAS9sQOXkTYCgYIARAAGAMSNwF-L9Ire21xwTUUZVIfXJXNign_SU2C09xBkbvVzW8fxsLGY3av3F3VrxLYVefAAMrv7twfpfY",
+  "YoutubeChannelTitle": "whats_going_on",
+  "LastTokenRefreshUtc": "2026-10-19T16:29:38.7001054Z",
+  "TokenStatus": "Valid"
+}
