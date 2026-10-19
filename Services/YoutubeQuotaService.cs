@@ -48,9 +48,9 @@ namespace YoutubeGenerator.Services
             // Configurable quota targets:
             // Default: 2 long videos per day, 4 shorts per day (Total 6 uploads = safely within 10,000 quota units / 1,600 per upload)
             MaxDailyLongVideos = _config.GetValue<int>("YouTube:MaxDailyLongVideos", 2);
-            MaxDailyShorts = _config.GetValue<int>("YouTube:MaxDailyShorts", 4);
-            MinShortDelayMinutes = _config.GetValue<int>("YouTube:MinShortDelayMinutes", 180); // 3 hours between shorts
-            MinLongVideoDelayHours = _config.GetValue<int>("YouTube:MinLongVideoDelayHours", 12); // 12 hours between long videos
+            MaxDailyShorts = _config.GetValue<int>("YouTube:MaxDailyShorts", 48);
+            MinShortDelayMinutes = _config.GetValue<int>("YouTube:MinShortDelayMinutes", 15);
+            MinLongVideoDelayHours = _config.GetValue<int>("YouTube:MinLongVideoDelayHours", 12);
 
             SeedHistoryIfEmpty();
         }

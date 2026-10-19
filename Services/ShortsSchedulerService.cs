@@ -237,29 +237,45 @@ namespace YoutubeGenerator.Services
             _logger.LogInformation($"⚡ [ShortsScheduler] Forcing immediate upload of Short '{target.Title}' (ID: {shortId})...");
             _renderTracker?.AddLog("shorts", $"⚡ Immediate upload triggered for Short '{target.Title}'");
 
-            return await UploadSingleShortAsync(target);
+            return await UploadSingleShortAsync(target, bypassQuota: true);
         }
 
-        public async Task<bool> ProcessNextScheduledShortAsync(bool forceImmediate = false)
+        public async Task<bool> ProcessNextScheduledShortAsync(bool forceImmediate = false, string? targetKindKey = null)
         {
             ShortItem? nextShort = null;
 
             lock (_fileLock)
             {
                 var bag = JsonFileService.Load<List<ShortItem>>(_bagShorts);
-                // Pick next short that is not uploaded, file exists, and its channel is not currently backed off
-                var candidates = bag
-                    .Where(s => !s.IsUploaded && File.Exists(s.FilePath) && !IsChannelBackedOff(s.KindKey, out _))
-                    .OrderBy(s => s.ScheduledPublishTime)
-                    .ToList();
+                var query = bag.Where(s => !s.IsUploaded && File.Exists(s.FilePath));
 
-                // Find the first eligible short whose channel is clear (not held by quota or pacing)
-                foreach (var candidate in candidates)
+                if (!string.IsNullOrWhiteSpace(targetKindKey))
                 {
-                    if (_quotaService.CanUploadShort(candidate.KindKey, out _))
+                    query = query.Where(s => s.KindKey.Equals(targetKindKey, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (!forceImmediate)
+                {
+                    query = query.Where(s => !IsChannelBackedOff(s.KindKey, out _));
+                }
+
+                var candidates = query.OrderBy(s => s.ScheduledPublishTime).ToList();
+
+                if (forceImmediate)
+                {
+                    // Pick the first candidate immediately regardless of pacing or quota
+                    nextShort = candidates.FirstOrDefault();
+                }
+                else
+                {
+                    // Find the first eligible short whose channel is clear (not held by quota or pacing)
+                    foreach (var candidate in candidates)
                     {
-                        nextShort = candidate;
-                        break;
+                        if (_quotaService.CanUploadShort(candidate.KindKey, out _))
+                        {
+                            nextShort = candidate;
+                            break;
+                        }
                     }
                 }
 
@@ -292,16 +308,18 @@ namespace YoutubeGenerator.Services
             }
 
             if (nextShort == null)
+            {
+                _logger.LogWarning($"[ShortsScheduler] ProcessNextScheduledShortAsync found no eligible un-uploaded short with existing file on disk (forceImmediate={forceImmediate}, targetKind={targetKindKey ?? "any"}).");
                 return false;
+            }
 
-            return await UploadSingleShortAsync(nextShort);
+            return await UploadSingleShortAsync(nextShort, bypassQuota: forceImmediate);
         }
 
-        private async Task<bool> UploadSingleShortAsync(ShortItem nextShort)
+        private async Task<bool> UploadSingleShortAsync(ShortItem nextShort, bool bypassQuota = false)
         {
-
-            // YouTube Quota & Long Video Balance Gatekeeper (double check)
-            if (!_quotaService.CanUploadShort(nextShort.KindKey, out string quotaReason))
+            // YouTube Quota & Long Video Balance Gatekeeper (double check unless bypassed by admin manual action)
+            if (!bypassQuota && !_quotaService.CanUploadShort(nextShort.KindKey, out string quotaReason))
             {
                 _logger.LogInformation($"[ShortsScheduler] Postponing Short '{nextShort.Title}': {quotaReason}");
                 _renderTracker?.AddLog("shorts", $"⏳ Postponing Short '{nextShort.Title}': {quotaReason}");
