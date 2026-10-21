@@ -742,6 +742,17 @@
             Will create <code>workspace/profiles/kinds/&lt;kindkey&gt;.json</code>
           </small>
 
+          <div class="form-group" style="margin-bottom: 0.6rem; background: rgba(56, 189, 248, 0.08); padding: 0.6rem; border-radius: 8px; border: 1px dashed rgba(56, 189, 248, 0.3);">
+            <label class="form-label" style="font-size: 0.72rem; letter-spacing: 0.04em; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.3rem;">
+              <span><i data-lucide="key" style="width: 12px; height: 12px; display: inline;"></i> GOOGLE CLOUD OAUTH JSON (OPTIONAL)</span>
+              <span style="font-size: 0.68rem; color: var(--text-muted);">client_secret_*.json</span>
+            </label>
+            <input type="file" id="newKindGoogleCredsFile" accept=".json" class="form-input" style="font-size: 0.76rem; padding: 0.3rem 0.5rem; background: rgba(0,0,0,0.4);">
+            <small style="color: var(--text-muted); font-size: 0.7rem; display: block; margin-top: 0.25rem;">
+              Upload downloaded OAuth client credentials from Google Cloud Console. Needed before connecting YouTube.
+            </small>
+          </div>
+
           <div class="oauth-mini-banner">
             <div class="form-group" style="margin-bottom: 0.4rem;">
               <label class="form-label" style="color: #ef4444; display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; letter-spacing: 0.04em;">

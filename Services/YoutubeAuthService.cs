@@ -82,13 +82,45 @@ namespace YoutubeGenerator.Services
             return (clientId, clientSecret);
         }
 
+        public (string ClientId, string ClientSecret) GetCredentialsForKind(string kindKey)
+        {
+            var cleanKey = kindKey.Trim().ToLowerInvariant();
+            var file = Path.Combine(_kindsDir, $"{cleanKey}.json");
+
+            if (File.Exists(file))
+            {
+                try
+                {
+                    var content = File.ReadAllText(file);
+                    var node = JsonNode.Parse(content);
+                    if (node is JsonObject obj)
+                    {
+                        var id = obj["YoutubeClientId"]?.ToString()?.Trim() ?? "";
+                        var sec = obj["YoutubeClientSecret"]?.ToString()?.Trim() ?? "";
+
+                        if (!string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(sec) && !id.Contains("***") && !sec.Contains("***"))
+                        {
+                            return (id, sec);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Failed to parse credentials from {file}");
+                }
+            }
+
+            // Fallback to global credentials
+            return GetGlobalCredentials();
+        }
+
         public string GetAuthorizationUrl(string kindKey, string redirectUri)
         {
-            var (clientId, clientSecret) = GetGlobalCredentials();
+            var (clientId, clientSecret) = GetCredentialsForKind(kindKey);
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
             {
-                throw new InvalidOperationException("YouTube Client ID and Client Secret are not configured on the server.");
+                throw new InvalidOperationException($"YouTube Google Cloud OAuth credentials are not configured for channel/profile '{kindKey}'. Please upload the Google credentials JSON file first.");
             }
 
             var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
@@ -120,13 +152,15 @@ namespace YoutubeGenerator.Services
             return baseUrl;
         }
 
-        public async Task<(string RefreshToken, string AccessToken, string ChannelId, string ChannelTitle)> ExchangeCodeAndFetchChannelAsync(string code, string redirectUri)
+        public async Task<(string RefreshToken, string AccessToken, string ChannelId, string ChannelTitle)> ExchangeCodeAndFetchChannelAsync(string code, string redirectUri, string? kindKey = null)
         {
-            var (clientId, clientSecret) = GetGlobalCredentials();
+            var (clientId, clientSecret) = !string.IsNullOrWhiteSpace(kindKey) 
+                ? GetCredentialsForKind(kindKey) 
+                : GetGlobalCredentials();
 
             if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
             {
-                throw new InvalidOperationException("YouTube Client ID and Client Secret are missing.");
+                throw new InvalidOperationException($"YouTube Client ID and Client Secret are missing for '{(kindKey ?? "global")}'.");
             }
 
             var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
@@ -185,7 +219,7 @@ namespace YoutubeGenerator.Services
             var cleanKey = kindKey.Trim().ToLowerInvariant();
             var file = Path.Combine(_kindsDir, $"{cleanKey}.json");
 
-            var (clientId, clientSecret) = GetGlobalCredentials();
+            var (clientId, clientSecret) = GetCredentialsForKind(cleanKey);
 
             Dictionary<string, object> existingDict = new();
             if (File.Exists(file))
@@ -262,7 +296,7 @@ namespace YoutubeGenerator.Services
             var file = Path.Combine(_kindsDir, $"{cleanKey}.json");
             if (!File.Exists(file)) return false;
 
-            var (clientId, clientSecret) = GetGlobalCredentials();
+            var (clientId, clientSecret) = GetCredentialsForKind(cleanKey);
 
             Dictionary<string, object> existingDict;
             try

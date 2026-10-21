@@ -28,7 +28,8 @@ import {
   connectYoutubeChannel, 
   disconnectYoutubeChannel,
   connectTiktokChannel,
-  disconnectTiktokChannel
+  disconnectTiktokChannel,
+  handleUploadGoogleCreds
 } from './modules/gameKinds.js';
 import { 
   renderSubKindsGrid, 
@@ -173,6 +174,7 @@ window.connectYoutubeChannel = connectYoutubeChannel;
 window.disconnectYoutubeChannel = (kindKey) => disconnectYoutubeChannel(kindKey, { onOpenLoginModal: openLoginModal, onFetchProfiles: fetchProfiles });
 window.connectTiktokChannel = connectTiktokChannel;
 window.disconnectTiktokChannel = (kindKey) => disconnectTiktokChannel(kindKey, { onOpenLoginModal: openLoginModal, onFetchProfiles: fetchProfiles });
+window.handleUploadGoogleCreds = (fileName, inputEl) => handleUploadGoogleCreds(fileName, inputEl, { onFetchProfiles: fetchProfiles });
 
 window.saveSubKindCard = saveSubKindCard;
 window.saveSubkindCard = saveSubKindCard;

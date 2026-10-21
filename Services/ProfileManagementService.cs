@@ -274,16 +274,13 @@ namespace YoutubeGenerator.Services
 
             dict["KindKey"] = cleanKey;
 
-            var clientId = _config["YouTube:ClientId"] ?? _config["YOUTUBE_CLIENT_ID"] ?? Environment.GetEnvironmentVariable("YOUTUBE_CLIENT_ID") ?? "";
-            var clientSecret = _config["YouTube:ClientSecret"] ?? _config["YOUTUBE_CLIENT_SECRET"] ?? Environment.GetEnvironmentVariable("YOUTUBE_CLIENT_SECRET") ?? "";
-
-            if (!dict.ContainsKey("YoutubeClientId") || string.IsNullOrWhiteSpace(dict["YoutubeClientId"]?.ToString()))
+            if (!dict.ContainsKey("YoutubeClientId"))
             {
-                dict["YoutubeClientId"] = clientId;
+                dict["YoutubeClientId"] = "";
             }
-            if (!dict.ContainsKey("YoutubeClientSecret") || string.IsNullOrWhiteSpace(dict["YoutubeClientSecret"]?.ToString()))
+            if (!dict.ContainsKey("YoutubeClientSecret"))
             {
-                dict["YoutubeClientSecret"] = clientSecret;
+                dict["YoutubeClientSecret"] = "";
             }
             if (!dict.ContainsKey("YoutubeChannelId"))
             {
@@ -547,6 +544,92 @@ namespace YoutubeGenerator.Services
                     SanitizeNode(item);
                 }
             }
+        }
+
+        public object UploadGoogleClientJson(string fileName, JsonElement jsonContent)
+        {
+            var cleanName = Path.GetFileName(fileName);
+            if (!cleanName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanName += ".json";
+            }
+
+            var fullPath = Path.Combine(_kindsDir, cleanName);
+            if (!File.Exists(fullPath))
+            {
+                throw new FileNotFoundException($"Kind profile '{cleanName}' not found.");
+            }
+
+            string clientId = "";
+            string clientSecret = "";
+
+            // Check if format is Google Cloud OAuth client format: { "web": { "client_id": ... } } or { "installed": { ... } }
+            if (jsonContent.ValueKind == JsonValueKind.Object)
+            {
+                JsonElement clientObj = jsonContent;
+                if (jsonContent.TryGetProperty("installed", out var installedElem) && installedElem.ValueKind == JsonValueKind.Object)
+                {
+                    clientObj = installedElem;
+                }
+                else if (jsonContent.TryGetProperty("web", out var webElem) && webElem.ValueKind == JsonValueKind.Object)
+                {
+                    clientObj = webElem;
+                }
+
+                if (clientObj.TryGetProperty("client_id", out var idProp))
+                {
+                    clientId = idProp.GetString() ?? "";
+                }
+                else if (clientObj.TryGetProperty("clientId", out var idProp2))
+                {
+                    clientId = idProp2.GetString() ?? "";
+                }
+                else if (clientObj.TryGetProperty("YoutubeClientId", out var idProp3))
+                {
+                    clientId = idProp3.GetString() ?? "";
+                }
+
+                if (clientObj.TryGetProperty("client_secret", out var secProp))
+                {
+                    clientSecret = secProp.GetString() ?? "";
+                }
+                else if (clientObj.TryGetProperty("clientSecret", out var secProp2))
+                {
+                    clientSecret = secProp2.GetString() ?? "";
+                }
+                else if (clientObj.TryGetProperty("YoutubeClientSecret", out var secProp3))
+                {
+                    clientSecret = secProp3.GetString() ?? "";
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
+            {
+                throw new ArgumentException("Invalid Google Client JSON format. Could not find 'client_id' and 'client_secret' in the provided file.");
+            }
+
+            var existingText = File.ReadAllText(fullPath);
+            var existingDict = JsonSerializer.Deserialize<Dictionary<string, object>>(existingText) ?? new();
+
+            existingDict["YoutubeClientId"] = clientId.Trim();
+            existingDict["YoutubeClientSecret"] = clientSecret.Trim();
+
+            // When new client credentials are uploaded, invalidate previous refresh tokens as they belonged to the old client
+            existingDict["YoutubeRefreshToken"] = "";
+            existingDict["YoutubeChannelId"] = "";
+            existingDict["TokenStatus"] = "CredentialsUploaded";
+
+            string formattedJson = JsonSerializer.Serialize(existingDict, JsonOptions);
+            File.WriteAllText(fullPath, formattedJson);
+
+            _logger.LogInformation($"Successfully uploaded Google Cloud credentials for kind profile '{cleanName}'. ClientId: {clientId.Substring(0, Math.Min(12, clientId.Length))}...");
+
+            return new
+            {
+                success = true,
+                message = $"Google Cloud credentials configured for '{cleanName}'. Ready for channel connection.",
+                clientId = clientId.Substring(0, Math.Min(15, clientId.Length)) + "..."
+            };
         }
 
         public List<string> GetResourceFiles()

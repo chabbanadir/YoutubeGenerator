@@ -518,6 +518,51 @@ namespace YoutubeGenerator.Controllers
         }
 
         [Authorize]
+        [HttpPost("profiles/kinds/{fileName}/google-credentials")]
+        public async Task<IActionResult> UploadGoogleCredentials([FromRoute] string fileName)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return BadRequest(new { success = false, message = "File name must be specified." });
+            }
+
+            try
+            {
+                JsonElement jsonDoc;
+
+                if (Request.HasFormContentType && Request.Form.Files.Count > 0)
+                {
+                    var file = Request.Form.Files[0];
+                    using var stream = file.OpenReadStream();
+                    using var doc = await JsonDocument.ParseAsync(stream);
+                    jsonDoc = doc.RootElement.Clone();
+                }
+                else
+                {
+                    using var doc = await JsonDocument.ParseAsync(Request.Body);
+                    jsonDoc = doc.RootElement.Clone();
+                }
+
+                var result = _profileService.UploadGoogleClientJson(fileName, jsonDoc);
+                _logger.LogInformation($"Admin '{User.Identity?.Name}' uploaded Google credentials for kind '{fileName}'.");
+                return Ok(result);
+            }
+            catch (FileNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to upload Google credentials for '{fileName}'");
+                return StatusCode(500, new { success = false, message = $"Failed to upload Google credentials: {ex.Message}" });
+            }
+        }
+
+        [Authorize]
         [HttpDelete("profiles/kinds/{fileName}")]
         public IActionResult DeleteKindProfile([FromRoute] string fileName)
         {

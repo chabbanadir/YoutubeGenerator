@@ -25,6 +25,7 @@ export function renderKindsGrid(kinds, callbacks = {}) {
       ? formatDate(uploadCfg.LastUploadTime) 
       : 'Never';
 
+    const hasGoogleCreds = !!(data.YoutubeClientId && data.YoutubeClientId.trim().length > 0 && !data.YoutubeClientId.includes('***'));
     const hasRefreshToken = !!(data.YoutubeRefreshToken && data.YoutubeRefreshToken.trim().length > 0);
     const channelTitle = data.YoutubeChannelTitle || '';
     const channelId = data.YoutubeChannelId || '';
@@ -208,22 +209,40 @@ export function renderKindsGrid(kinds, callbacks = {}) {
         </div>
 
         <!-- YouTube Connection Row -->
-        <div class="profile-section" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(0,0,0,0.25); padding: 0.45rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
-          ${hasRefreshToken ? `
-            <div style="font-size: 0.78rem; color: #34d399; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="shield-check" style="width: 14px; height: 14px;"></i> YouTube Linked & Ready
+        <div class="profile-section" style="background: rgba(0,0,0,0.25); padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.35rem;">
+            <div style="font-size: 0.72rem; display: flex; align-items: center; gap: 0.35rem;">
+              ${hasGoogleCreds 
+                ? `<span style="color: #38bdf8; font-weight: 600;"><i data-lucide="key" style="width: 12px; height: 12px; display: inline;"></i> Google Cloud Key Active</span>` 
+                : `<span style="color: #f59e0b; font-weight: 600;"><i data-lucide="key-round" style="width: 12px; height: 12px; display: inline;"></i> Missing Google JSON</span>`}
             </div>
-            <button type="button" class="btn-youtube-disconnect" onclick="window.disconnectYoutubeChannel('${safeKindKey}')" title="Disconnect YouTube channel">
-              <i data-lucide="log-out" style="width: 13px; height: 13px;"></i> Logout
-            </button>
-          ` : `
-            <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.35rem;">
-              <i data-lucide="alert-circle" style="width: 14px; height: 14px; color: #f59e0b;"></i> Unlinked YouTube
-            </div>
-            <button type="button" class="btn-youtube-connect" style="background: #ef4444; color: white; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.45rem 0.75rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); text-transform: uppercase; font-size: 0.76rem; letter-spacing: 0.02em;" onclick="window.connectYoutubeChannel('${safeKindKey}')" title="Link YouTube channel via Google OAuth">
-              ${getYoutubeIcon(15, 'margin-right: 4px;')} CONNECT YOUTUBE
-            </button>
-          `}
+            ${state.isAuthenticatedUser ? `
+              <div>
+                <input type="file" id="upload-creds-input-${escapedFileName}" accept=".json" style="display: none;" onchange="window.handleUploadGoogleCreds('${safeFileName}', this)">
+                <button type="button" class="btn btn-secondary" style="padding: 0.2rem 0.45rem; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem;" onclick="document.getElementById('upload-creds-input-${escapedFileName}').click()" title="Upload Google Cloud OAuth Client JSON">
+                  <i data-lucide="upload" style="width: 11px; height: 11px;"></i> Upload JSON
+                </button>
+              </div>
+            ` : ''}
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+            ${hasRefreshToken ? `
+              <div style="font-size: 0.78rem; color: #34d399; font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="shield-check" style="width: 14px; height: 14px;"></i> YouTube Linked & Ready
+              </div>
+              <button type="button" class="btn-youtube-disconnect" onclick="window.disconnectYoutubeChannel('${safeKindKey}')" title="Disconnect YouTube channel">
+                <i data-lucide="log-out" style="width: 13px; height: 13px;"></i> Logout
+              </button>
+            ` : `
+              <div style="font-size: 0.78rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.35rem;">
+                <i data-lucide="alert-circle" style="width: 14px; height: 14px; color: #f59e0b;"></i> Unlinked YouTube
+              </div>
+              <button type="button" class="btn-youtube-connect" style="background: #ef4444; color: white; border: none; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: 0.45rem 0.75rem; border-radius: 6px; box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4); text-transform: uppercase; font-size: 0.76rem; letter-spacing: 0.02em;" onclick="window.connectYoutubeChannel('${safeKindKey}', ${hasGoogleCreds})" title="Link YouTube channel via Google OAuth">
+                ${getYoutubeIcon(15, 'margin-right: 4px;')} CONNECT YOUTUBE
+              </button>
+            `}
+          </div>
         </div>
 
         <!-- TikTok Connection Row -->
@@ -395,6 +414,21 @@ export async function handleCreateKind(e, callbacks = {}) {
       throw new Error(data.message || 'Failed to create Kind profile.');
     }
 
+    // If Google Credentials file was chosen, upload it right away
+    const credsFileInput = document.getElementById('newKindGoogleCredsFile');
+    if (credsFileInput && credsFileInput.files && credsFileInput.files.length > 0) {
+      try {
+        const formData = new FormData();
+        formData.append('file', credsFileInput.files[0]);
+        await fetchWithAuth(`/api/dashboard/profiles/kinds/${encodeURIComponent(keyInput)}/google-credentials`, {
+          method: 'POST',
+          body: formData
+        });
+      } catch (uploadErr) {
+        console.warn('Failed to upload Google credentials file after creation:', uploadErr);
+      }
+    }
+
     showToast(`Kind profile '${keyInput}' (${category}) created successfully!`, 'success');
     closeCreateKindModal();
     if (callbacks.onFetchProfiles) await callbacks.onFetchProfiles();
@@ -459,9 +493,24 @@ export async function handleCreateAndConnectKind(e, callbacks = {}) {
       throw new Error(data.message || 'Failed to create Kind profile.');
     }
 
+    // If Google Credentials file was chosen, upload it first
+    let hasCredsUploaded = false;
+    const credsFileInput = document.getElementById('newKindGoogleCredsFile');
+    if (credsFileInput && credsFileInput.files && credsFileInput.files.length > 0) {
+      const formData = new FormData();
+      formData.append('file', credsFileInput.files[0]);
+      const credsRes = await fetchWithAuth(`/api/dashboard/profiles/kinds/${encodeURIComponent(keyInput)}/google-credentials`, {
+        method: 'POST',
+        body: formData
+      });
+      if (credsRes.ok) {
+        hasCredsUploaded = true;
+      }
+    }
+
     showToast(`Kind profile '${keyInput}' created! Launching YouTube connection...`, 'info');
     closeCreateKindModal();
-    await connectYoutubeChannel(keyInput);
+    await connectYoutubeChannel(keyInput, hasCredsUploaded);
   } catch (err) {
     if (errEl) {
       errEl.innerText = err.message;
@@ -474,7 +523,45 @@ export async function handleCreateAndConnectKind(e, callbacks = {}) {
   }
 }
 
-export async function connectYoutubeChannel(kindKey) {
+export async function handleUploadGoogleCreds(fileName, inputEl, callbacks = {}) {
+  if (!inputEl || !inputEl.files || inputEl.files.length === 0) return;
+  const file = inputEl.files[0];
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    showToast(`Uploading Google Cloud credentials for '${fileName}'...`, 'info');
+    const res = await fetchWithAuth(`/api/dashboard/profiles/kinds/${encodeURIComponent(fileName)}/google-credentials`, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      showToast(data.message || 'Google Cloud credentials configured successfully!', 'success');
+      if (callbacks.onFetchProfiles) {
+        await callbacks.onFetchProfiles();
+      } else if (window.fetchProfiles) {
+        await window.fetchProfiles();
+      }
+    } else {
+      showToast(data.message || data.error || 'Failed to upload Google Cloud credentials.', 'error');
+    }
+  } catch (err) {
+    console.error('Failed to upload Google credentials:', err);
+    showToast('Error uploading Google credentials file.', 'error');
+  } finally {
+    inputEl.value = '';
+  }
+}
+
+export async function connectYoutubeChannel(kindKey, hasCreds = true) {
+  if (hasCreds === false) {
+    alert(`Before connecting YouTube for '${kindKey.toUpperCase()}', you must upload its Google Cloud OAuth Client JSON file.\n\nPlease click "Upload JSON" on this profile card.`);
+    return;
+  }
+
   try {
     const res = await fetch(getApiUrl(`/api/youtube/auth-url?kind=${encodeURIComponent(kindKey)}`));
     const data = await res.json();

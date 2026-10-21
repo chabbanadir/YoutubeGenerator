@@ -1,16 +1,16 @@
 {
   "KindKey": "valorant",
-  "YoutubeChannelId": "UClSaLKRy72N3C2krdylVhXg",
-  "YoutubeClientId": "578620244358-6i2if9e46tn6si9lbumkc2km0epoamqi.apps.googleusercontent.com",
-  "YoutubeClientSecret": "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",
-  "YoutubeRefreshToken": "1//03KOQfKJauwy9CgYIARAAGAMSNwF-L9Ir0tuc1-H_0Lu20EOSGcka2n17uv461PkTX9Atym9v6AQIzwMMvx_wb3uQaro21Y2EK4U",
+  "YoutubeChannelId": "",
+  "YoutubeClientId": "",
+  "YoutubeClientSecret": "",
+  "YoutubeRefreshToken": "",
   "UploadConfig": {
     "MinDelayHours": 12,
     "LastUploadTime": "2025-12-17T00:00:00.00Z",
     "UploadCounter": 0,
     "Enabled": false
   },
-  "TokenStatus": "Valid",
+  "TokenStatus": "Disconnected",
   "LastTokenRefreshUtc": "2026-10-11T18:01:29.8370511Z",
-  "YoutubeChannelTitle": "Daily Dose Of Valorant"
+  "YoutubeChannelTitle": ""
 }

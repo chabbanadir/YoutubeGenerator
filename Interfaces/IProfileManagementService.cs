@@ -12,6 +12,7 @@ namespace YoutubeGenerator.Interfaces
         object UpdateKindProfile(string fileName, JsonElement content);
         object UpdateKindMinDelay(string fileName, JsonElement body);
         void DeleteKindProfile(string fileName);
+        object UploadGoogleClientJson(string fileName, JsonElement jsonContent);
         List<string> GetResourceFiles();
     }
 }

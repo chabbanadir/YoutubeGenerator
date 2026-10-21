@@ -122,7 +122,7 @@ namespace YoutubeGenerator.Controllers
                 var redirectUri = GetRedirectUri();
 
                 var (refreshToken, accessToken, channelId, channelTitle) = 
-                    await _authService.ExchangeCodeAndFetchChannelAsync(code, redirectUri);
+                    await _authService.ExchangeCodeAndFetchChannelAsync(code, redirectUri, state);
 
                 _authService.SaveChannelConnection(state, channelId, refreshToken, channelTitle);
 

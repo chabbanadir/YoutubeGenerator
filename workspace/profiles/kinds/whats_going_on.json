@@ -21,17 +21,17 @@
     "#TwitchClips",
     "#Viral"
   ],
-  "YoutubeChannelId": "UCKfvJtoyXtxtC69KNpa9CXQ",
+  "YoutubeChannelId": "",
   "UploadConfig": {
     "MinDelayHours": 10,
     "ShortsCadenceMinutes": 60,
     "UploadCounter": 0,
     "Enabled": true
   },
-  "YoutubeClientId": "578620244358-6i2if9e46tn6si9lbumkc2km0epoamqi.apps.googleusercontent.com",
-  "YoutubeClientSecret": "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",
-  "YoutubeRefreshToken": "1//03DAS9sQOXkTYCgYIARAAGAMSNwF-L9Ire21xwTUUZVIfXJXNign_SU2C09xBkbvVzW8fxsLGY3av3F3VrxLYVefAAMrv7twfpfY",
-  "YoutubeChannelTitle": "whats_going_on",
+  "YoutubeClientId": "",
+  "YoutubeClientSecret": "",
+  "YoutubeRefreshToken": "",
+  "YoutubeChannelTitle": "",
   "LastTokenRefreshUtc": "2026-10-19T16:29:38.7001054Z",
-  "TokenStatus": "Valid"
+  "TokenStatus": "Disconnected"
 }
